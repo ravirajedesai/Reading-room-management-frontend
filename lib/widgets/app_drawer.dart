@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 
 import '../screens/dashboard_page.dart';
+import '../screens/owner_dashboard_page.dart'; // ✅ added
 import '../screens/student_page.dart';
 import '../screens/seat_booking_page.dart';
 import '../screens/login_page.dart';
+import '../services/session_service.dart'; // ✅ added
 
 class AppDrawer extends StatelessWidget {
   final int userId;
   final String name;
   final String mobile;
   final String selectedPage;
+  final String role; // ✅ added
 
   const AppDrawer({
     super.key,
@@ -17,6 +20,7 @@ class AppDrawer extends StatelessWidget {
     required this.name,
     required this.mobile,
     required this.selectedPage,
+    required this.role, // ✅ added
   });
 
   // =============================================================
@@ -26,14 +30,14 @@ class AppDrawer extends StatelessWidget {
   void _goToDashboard(BuildContext context) {
     Navigator.of(context).pop();
 
-    if (selectedPage == "Dashboard") {
-      return;
-    }
+    if (selectedPage == "Dashboard") return;
 
+    // ✅ Route to correct dashboard based on role
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
-        builder: (_) =>
-            DashboardPage(userId: userId, name: name, mobile: mobile),
+        builder: (_) => role.toUpperCase() == 'OWNER'
+            ? OwnerDashboardPage(userId: userId, name: name, mobile: mobile)
+            : DashboardPage(userId: userId, name: name, mobile: mobile),
       ),
       (route) => false,
     );
@@ -46,9 +50,7 @@ class AppDrawer extends StatelessWidget {
   void _goToStudentPage(BuildContext context) {
     Navigator.of(context).pop();
 
-    if (selectedPage == "Student Management") {
-      return;
-    }
+    if (selectedPage == "Student Management") return;
 
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
@@ -65,9 +67,7 @@ class AppDrawer extends StatelessWidget {
   void _goToSeatBooking(BuildContext context) {
     Navigator.of(context).pop();
 
-    if (selectedPage == "Seat Booking") {
-      return;
-    }
+    if (selectedPage == "Seat Booking") return;
 
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
@@ -82,8 +82,10 @@ class AppDrawer extends StatelessWidget {
   // LOGOUT
   // =============================================================
 
-  void _logout(BuildContext context) {
+  void _logout(BuildContext context) async {
     Navigator.of(context).pop();
+
+    await SessionService.logout(); // ✅ clear session on logout
 
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginPage()),
@@ -97,6 +99,8 @@ class AppDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isOwner = role.toUpperCase() == 'OWNER';
+
     return Drawer(
       backgroundColor: Colors.white,
 
@@ -122,12 +126,8 @@ class AppDrawer extends StatelessWidget {
                   CircleAvatar(
                     radius: 30,
                     backgroundColor: Colors.white,
-
                     child: Text(
-                      name.isNotEmpty
-                          ? name.substring(0, 1).toUpperCase()
-                          : "U",
-
+                      name.isNotEmpty ? name[0].toUpperCase() : 'U',
                       style: const TextStyle(
                         fontSize: 25,
                         color: Color(0xFF4054C7),
@@ -139,11 +139,9 @@ class AppDrawer extends StatelessWidget {
                   const SizedBox(height: 14),
 
                   Text(
-                    name.isNotEmpty ? name : "User",
-
+                    name.isNotEmpty ? name : 'User',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 19,
@@ -155,8 +153,29 @@ class AppDrawer extends StatelessWidget {
 
                   Text(
                     mobile,
-
                     style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+
+                  const SizedBox(height: 6),
+
+                  // ✅ Role badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      isOwner ? 'Owner' : 'Student',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -170,32 +189,34 @@ class AppDrawer extends StatelessWidget {
             _drawerItem(
               context,
               icon: Icons.dashboard_rounded,
-              title: "Dashboard",
-              selected: selectedPage == "Dashboard",
+              title: 'Dashboard',
+              selected: selectedPage == 'Dashboard',
               onTap: () => _goToDashboard(context),
             ),
 
             // =====================================================
-            // STUDENT MANAGEMENT
+            // STUDENT MANAGEMENT — owner only
             // =====================================================
-            _drawerItem(
-              context,
-              icon: Icons.people_alt_rounded,
-              title: "Student Management",
-              selected: selectedPage == "Student Management",
-              onTap: () => _goToStudentPage(context),
-            ),
+            if (!isOwner)
+              _drawerItem(
+                context,
+                icon: Icons.people_alt_rounded,
+                title: 'Student Management',
+                selected: selectedPage == 'Student Management',
+                onTap: () => _goToStudentPage(context),
+              ),
 
             // =====================================================
-            // SEAT BOOKING
+            // SEAT BOOKING — student only
             // =====================================================
-            _drawerItem(
-              context,
-              icon: Icons.event_seat_rounded,
-              title: "Seat Booking",
-              selected: selectedPage == "Seat Booking",
-              onTap: () => _goToSeatBooking(context),
-            ),
+            if (!isOwner)
+              _drawerItem(
+                context,
+                icon: Icons.event_seat_rounded,
+                title: 'Seat Booking',
+                selected: selectedPage == 'Seat Booking',
+                onTap: () => _goToSeatBooking(context),
+              ),
 
             const Divider(height: 30, indent: 20, endIndent: 20),
 
@@ -205,13 +226,12 @@ class AppDrawer extends StatelessWidget {
             _drawerItem(
               context,
               icon: Icons.settings_rounded,
-              title: "Settings",
-              selected: selectedPage == "Settings",
+              title: 'Settings',
+              selected: selectedPage == 'Settings',
               onTap: () {
                 Navigator.of(context).pop();
-
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Settings coming soon")),
+                  const SnackBar(content: Text('Settings coming soon')),
                 );
               },
             ),
@@ -222,7 +242,7 @@ class AppDrawer extends StatelessWidget {
             _drawerItem(
               context,
               icon: Icons.logout_rounded,
-              title: "Logout",
+              title: 'Logout',
               iconColor: Colors.red,
               textColor: Colors.red,
               onTap: () => _logout(context),
@@ -235,12 +255,9 @@ class AppDrawer extends StatelessWidget {
             // =====================================================
             const Padding(
               padding: EdgeInsets.all(20),
-
               child: Text(
-                "Reading Room Management\nVersion 1.0.0",
-
+                'Reading Room Management\nVersion 1.0.0',
                 textAlign: TextAlign.center,
-
                 style: TextStyle(color: Colors.grey, fontSize: 12),
               ),
             ),
@@ -259,9 +276,7 @@ class AppDrawer extends StatelessWidget {
     required IconData icon,
     required String title,
     required VoidCallback onTap,
-
     bool selected = false,
-
     Color? iconColor,
     Color? textColor,
   }) {
@@ -270,7 +285,6 @@ class AppDrawer extends StatelessWidget {
 
       decoration: BoxDecoration(
         color: selected ? const Color(0xFFEFF1FF) : Colors.transparent,
-
         borderRadius: BorderRadius.circular(12),
       ),
 
@@ -279,7 +293,6 @@ class AppDrawer extends StatelessWidget {
 
         leading: Icon(
           icon,
-
           color:
               iconColor ??
               (selected ? const Color(0xFF4054C7) : Colors.grey.shade700),
@@ -287,12 +300,10 @@ class AppDrawer extends StatelessWidget {
 
         title: Text(
           title,
-
           style: TextStyle(
             color:
                 textColor ??
                 (selected ? const Color(0xFF4054C7) : const Color(0xFF303746)),
-
             fontWeight: selected ? FontWeight.bold : FontWeight.w500,
           ),
         ),

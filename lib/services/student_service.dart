@@ -1,9 +1,19 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class StudentService {
   static const String baseUrl =
       "https://automatic-library-management.onrender.com";
+
+  // ============================================================
+  // GET TOKEN
+  // ============================================================
+
+  static Future<String?> _getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('token');
+  }
 
   // ============================================================
   // ADD STUDENT
@@ -14,9 +24,14 @@ class StudentService {
     required String city,
     required String address,
   }) async {
+    final token = await _getToken();
+
     final response = await http.post(
       Uri.parse("$baseUrl/students/add"),
-      headers: {"Content-Type": "application/json"},
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
       body: jsonEncode({
         "city": city,
         "address": address,
@@ -42,7 +57,15 @@ class StudentService {
   // ============================================================
 
   static Future<List<dynamic>> getAllStudents() async {
-    final response = await http.get(Uri.parse("$baseUrl/students"));
+    final token = await _getToken();
+
+    final response = await http.get(
+      Uri.parse("$baseUrl/students"),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+    );
 
     print("GET ALL STUDENTS STATUS: ${response.statusCode}");
     print("GET ALL STUDENTS RESPONSE: ${response.body}");
@@ -62,8 +85,14 @@ class StudentService {
   // ============================================================
 
   static Future<Map<String, dynamic>> getStudentByMobile(String mobile) async {
+    final token = await _getToken();
+
     final response = await http.get(
       Uri.parse("$baseUrl/students/mobile/$mobile"),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
     );
 
     print("GET STUDENT STATUS: ${response.statusCode}");
@@ -88,9 +117,14 @@ class StudentService {
     required String city,
     required String address,
   }) async {
+    final token = await _getToken();
+
     final response = await http.put(
       Uri.parse("$baseUrl/students/update/$mobile"),
-      headers: {"Content-Type": "application/json"},
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
       body: jsonEncode({"city": city, "address": address}),
     );
 
@@ -112,6 +146,8 @@ class StudentService {
   // ============================================================
 
   static Future<Map<String, dynamic>?> getMyBooking(int userId) async {
+    final token = await _getToken();
+
     final url = "$baseUrl/bookings/my-booking/$userId";
 
     print("========================================");
@@ -121,7 +157,10 @@ class StudentService {
 
     final response = await http.get(
       Uri.parse(url),
-      headers: {"Content-Type": "application/json"},
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
     );
 
     print("BOOKING STATUS: ${response.statusCode}");
@@ -135,16 +174,12 @@ class StudentService {
 
       final decoded = jsonDecode(response.body);
 
-      if (decoded == null) {
-        return null;
-      }
+      if (decoded == null) return null;
 
       return Map<String, dynamic>.from(decoded);
     }
 
-    if (response.statusCode == 404) {
-      return null;
-    }
+    if (response.statusCode == 404) return null;
 
     throw Exception(
       "Failed to load booking: "

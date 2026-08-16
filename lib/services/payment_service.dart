@@ -27,9 +27,11 @@ class PaymentService {
 
   Future<Map<String, String>> _headers() async {
     final userId = await _getUserId();
+    final token = await SessionService.getToken();
     return {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
+      'Authorization': 'Bearer $token',
       'X-USER-ID': userId.toString(),
     };
   }

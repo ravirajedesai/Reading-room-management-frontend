@@ -1,7 +1,9 @@
 import 'dart:convert';
+
 import 'package:http/http.dart' as http;
 
 import '../models/booking_model.dart';
+import 'session_service.dart';
 
 class BookingException implements Exception {
   final String message;
@@ -17,15 +19,47 @@ class BookingService {
   static const String baseUrl =
       "https://automatic-library-management.onrender.com";
 
+  // ============================================================
+  // HOLD SEAT
+  // ============================================================
+
   Future<Booking> holdSeat({required int userId, required int seatId}) async {
+    // Get JWT saved during login
+    final String? token = await SessionService.getToken();
+
+    print("======================================");
+    print("HOLD SEAT");
+    print("USER ID: $userId");
+    print("SEAT ID: $seatId");
+    print(
+      "JWT: ${token != null && token.isNotEmpty ? 'AVAILABLE' : 'MISSING'}",
+    );
+    print("======================================");
+
+    if (token == null || token.isEmpty) {
+      throw BookingException(
+        message: "Login session expired. Please login again.",
+      );
+    }
+
     final response = await http.post(
       Uri.parse('$baseUrl/bookings/hold'),
+
       headers: {
         'Content-Type': 'application/json',
+
+        // JWT authentication
+        'Authorization': 'Bearer $token',
+
+        // Keep this if your backend still uses it
         'X-USER-ID': userId.toString(),
       },
+
       body: jsonEncode({'seatId': seatId}),
     );
+
+    print("HOLD SEAT STATUS: ${response.statusCode}");
+    print("HOLD SEAT RESPONSE: ${response.body}");
 
     // ============================================================
     // SUCCESS
@@ -45,7 +79,7 @@ class BookingService {
     }
 
     // ============================================================
-    // ERROR
+    // ERROR MESSAGE
     // ============================================================
 
     String message = "Unable to create booking";
@@ -55,13 +89,10 @@ class BookingService {
         final data = jsonDecode(response.body);
 
         if (data is Map<String, dynamic>) {
-          // First priority: backend "message"
           if (data['message'] != null &&
               data['message'].toString().trim().isNotEmpty) {
             message = data['message'].toString();
-          }
-          // Fallback
-          else if (data['error'] != null &&
+          } else if (data['error'] != null &&
               data['error'].toString().trim().isNotEmpty) {
             message = data['error'].toString();
           } else if (data['detail'] != null &&
@@ -73,31 +104,28 @@ class BookingService {
         }
       }
     } catch (e) {
-      // If response is not JSON
       if (response.body.isNotEmpty) {
         message = response.body;
       }
     }
 
     // ============================================================
-    // SPECIFIC ERROR HANDLING
+    // 401 / 403
     // ============================================================
 
-    if (response.statusCode == 409) {
-      throw BookingException(message: message, statusCode: response.statusCode);
+    if (response.statusCode == 401) {
+      throw BookingException(
+        message: "Unauthorized. Please login again.",
+        statusCode: 401,
+      );
     }
 
-    if (response.statusCode == 400) {
-      throw BookingException(message: message, statusCode: response.statusCode);
+    if (response.statusCode == 403) {
+      throw BookingException(
+        message: "Access denied. Your login session may be invalid.",
+        statusCode: 403,
+      );
     }
-
-    if (response.statusCode == 404) {
-      throw BookingException(message: message, statusCode: response.statusCode);
-    }
-
-    // ============================================================
-    // GENERAL ERROR
-    // ============================================================
 
     throw BookingException(message: message, statusCode: response.statusCode);
   }

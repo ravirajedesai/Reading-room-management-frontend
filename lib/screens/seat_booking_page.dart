@@ -526,7 +526,8 @@ class _SeatBookingPageState extends State<SeatBookingPage> {
         userId: widget.userId,
         name: widget.name,
         mobile: widget.mobile,
-        selectedPage: "Seat Booking",
+        selectedPage: 'Seat Booking',
+        role: 'STUDENT', // ✅ add this
       ),
       appBar: AppBar(
         elevation: 0,

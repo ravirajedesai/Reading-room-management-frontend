@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../widgets/app_drawer.dart';
 import '../services/seat_service.dart';
-import '../models/seat_model.dart';
 
 class DashboardPage extends StatefulWidget {
   final int userId;
@@ -22,13 +21,14 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   // =========================================================
-  // SEAT DATA
+  // DATA
   // =========================================================
 
-  List<Seat> seats = [];
-
+  int _totalSeats = 0;
+  int _availableSeats = 0;
+  int _bookedSeats = 0;
+  bool _hasCache = false;
   bool loadingSeats = true;
-
   String? seatError;
 
   // =========================================================
@@ -42,30 +42,29 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   // =========================================================
-  // LOAD SEATS
+  // LOAD SEAT STATS
   // =========================================================
 
   Future<void> loadSeatData() async {
-    if (mounted) {
-      setState(() {
-        loadingSeats = true;
-        seatError = null;
-      });
+    if (!_hasCache) {
+      if (mounted) {
+        setState(() {
+          loadingSeats = true;
+          seatError = null;
+        });
+      }
     }
 
     try {
-      debugPrint('========================================');
-      debugPrint('DASHBOARD - LOADING SEATS');
-
-      final result = await SeatService().getAllSeats();
-
-      debugPrint('TOTAL SEATS RECEIVED: ${result.length}');
-      debugPrint('========================================');
+      final stats = await SeatService().getSeatStats();
 
       if (!mounted) return;
 
       setState(() {
-        seats = result;
+        _totalSeats = (stats['totalSeats'] as num).toInt();
+        _availableSeats = (stats['availableSeats'] as num).toInt();
+        _bookedSeats = (stats['bookedSeats'] as num).toInt();
+        _hasCache = true;
         loadingSeats = false;
       });
     } catch (e) {
@@ -75,27 +74,9 @@ class _DashboardPageState extends State<DashboardPage> {
 
       setState(() {
         loadingSeats = false;
-        seatError = e.toString();
+        if (!_hasCache) seatError = e.toString();
       });
     }
-  }
-
-  // =========================================================
-  // SEAT COUNTS
-  // =========================================================
-
-  int get totalSeats => seats.length;
-
-  int get availableSeats {
-    return seats
-        .where((seat) => seat.status.toUpperCase().trim() == 'AVAILABLE')
-        .length;
-  }
-
-  int get bookedSeats {
-    return seats
-        .where((seat) => seat.status.toUpperCase().trim() == 'BOOKED')
-        .length;
   }
 
   // =========================================================
@@ -115,6 +96,7 @@ class _DashboardPageState extends State<DashboardPage> {
         name: widget.name,
         mobile: widget.mobile,
         selectedPage: 'Dashboard',
+        role: 'STUDENT',
       ),
 
       // =====================================================
@@ -177,23 +159,22 @@ class _DashboardPageState extends State<DashboardPage> {
 
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-
             padding: const EdgeInsets.fromLTRB(18, 20, 18, 30),
 
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
 
               children: [
-                // =================================================
+                // ==============================================
                 // WELCOME
-                // =================================================
+                // ==============================================
                 _welcomeSection(),
 
                 const SizedBox(height: 28),
 
-                // =================================================
+                // ==============================================
                 // OVERVIEW TITLE
-                // =================================================
+                // ==============================================
                 const Text(
                   'Seat Overview',
                   style: TextStyle(
@@ -212,16 +193,16 @@ class _DashboardPageState extends State<DashboardPage> {
 
                 const SizedBox(height: 16),
 
-                // =================================================
-                // ERROR
-                // =================================================
+                // ==============================================
+                // STATS / ERROR
+                // ==============================================
                 if (seatError != null) _errorCard() else _seatStatistics(),
 
                 const SizedBox(height: 25),
 
-                // =================================================
+                // ==============================================
                 // INFORMATION CARD
-                // =================================================
+                // ==============================================
                 _informationCard(),
               ],
             ),
@@ -242,7 +223,6 @@ class _DashboardPageState extends State<DashboardPage> {
 
     return Container(
       width: double.infinity,
-
       padding: const EdgeInsets.all(22),
 
       decoration: BoxDecoration(
@@ -251,9 +231,7 @@ class _DashboardPageState extends State<DashboardPage> {
           end: Alignment.bottomRight,
           colors: [Color(0xFF4054C7), Color(0xFF6575D6)],
         ),
-
         borderRadius: BorderRadius.circular(22),
-
         boxShadow: [
           BoxShadow(
             color: Colors.indigo.withOpacity(0.18),
@@ -265,13 +243,12 @@ class _DashboardPageState extends State<DashboardPage> {
 
       child: Row(
         children: [
-          // =====================================================
-          // PROFILE ICON
-          // =====================================================
+          // ===================================================
+          // AVATAR
+          // ===================================================
           Container(
             height: 58,
             width: 58,
-
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.18),
               shape: BoxShape.circle,
@@ -280,7 +257,6 @@ class _DashboardPageState extends State<DashboardPage> {
                 width: 1,
               ),
             ),
-
             child: Center(
               child: Text(
                 firstLetter,
@@ -295,9 +271,9 @@ class _DashboardPageState extends State<DashboardPage> {
 
           const SizedBox(width: 16),
 
-          // =====================================================
+          // ===================================================
           // USER DETAILS
-          // =====================================================
+          // ===================================================
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -333,9 +309,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       size: 14,
                       color: Colors.white70,
                     ),
-
                     const SizedBox(width: 5),
-
                     Flexible(
                       child: Text(
                         widget.mobile,
@@ -362,9 +336,7 @@ class _DashboardPageState extends State<DashboardPage> {
   // ===========================================================
 
   Widget _seatStatistics() {
-    if (loadingSeats) {
-      return _loadingCard();
-    }
+    if (loadingSeats) return _loadingCard();
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -379,7 +351,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     child: _statCard(
                       icon: Icons.event_seat_rounded,
                       title: 'Total Seats',
-                      value: totalSeats.toString(),
+                      value: _totalSeats.toString(),
                       description: 'Room capacity',
                       iconColor: const Color(0xFF4054C7),
                       backgroundColor: const Color(0xFFEFF1FF),
@@ -392,7 +364,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     child: _statCard(
                       icon: Icons.check_circle_rounded,
                       title: 'Available',
-                      value: availableSeats.toString(),
+                      value: _availableSeats.toString(),
                       description: 'Ready to book',
                       iconColor: const Color(0xFF159570),
                       backgroundColor: const Color(0xFFE8F8F2),
@@ -406,7 +378,7 @@ class _DashboardPageState extends State<DashboardPage> {
               _statCard(
                 icon: Icons.event_seat_rounded,
                 title: 'Booked',
-                value: bookedSeats.toString(),
+                value: _bookedSeats.toString(),
                 description: 'Currently reserved',
                 iconColor: Colors.orange,
                 backgroundColor: const Color(0xFFFFF3E0),
@@ -421,7 +393,7 @@ class _DashboardPageState extends State<DashboardPage> {
               child: _statCard(
                 icon: Icons.event_seat_rounded,
                 title: 'Total Seats',
-                value: totalSeats.toString(),
+                value: _totalSeats.toString(),
                 description: 'Room capacity',
                 iconColor: const Color(0xFF4054C7),
                 backgroundColor: const Color(0xFFEFF1FF),
@@ -434,7 +406,7 @@ class _DashboardPageState extends State<DashboardPage> {
               child: _statCard(
                 icon: Icons.check_circle_rounded,
                 title: 'Available',
-                value: availableSeats.toString(),
+                value: _availableSeats.toString(),
                 description: 'Ready to book',
                 iconColor: const Color(0xFF159570),
                 backgroundColor: const Color(0xFFE8F8F2),
@@ -447,7 +419,7 @@ class _DashboardPageState extends State<DashboardPage> {
               child: _statCard(
                 icon: Icons.event_seat_rounded,
                 title: 'Booked',
-                value: bookedSeats.toString(),
+                value: _bookedSeats.toString(),
                 description: 'Currently reserved',
                 iconColor: Colors.orange,
                 backgroundColor: const Color(0xFFFFF3E0),
@@ -473,16 +445,12 @@ class _DashboardPageState extends State<DashboardPage> {
   }) {
     return Container(
       width: double.infinity,
-
       padding: const EdgeInsets.all(18),
 
       decoration: BoxDecoration(
         color: Colors.white,
-
         borderRadius: BorderRadius.circular(18),
-
         border: Border.all(color: Colors.grey.shade100),
-
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.045),
@@ -495,26 +463,18 @@ class _DashboardPageState extends State<DashboardPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // =====================================================
-          // ICON
-          // =====================================================
           Container(
             height: 46,
             width: 46,
-
             decoration: BoxDecoration(
               color: backgroundColor,
               borderRadius: BorderRadius.circular(13),
             ),
-
             child: Icon(icon, color: iconColor, size: 23),
           ),
 
           const SizedBox(height: 15),
 
-          // =====================================================
-          // VALUE
-          // =====================================================
           Text(
             value,
             style: const TextStyle(
@@ -526,9 +486,6 @@ class _DashboardPageState extends State<DashboardPage> {
 
           const SizedBox(height: 3),
 
-          // =====================================================
-          // TITLE
-          // =====================================================
           Text(
             title,
             style: const TextStyle(
@@ -540,9 +497,6 @@ class _DashboardPageState extends State<DashboardPage> {
 
           const SizedBox(height: 3),
 
-          // =====================================================
-          // DESCRIPTION
-          // =====================================================
           Text(
             description,
             style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
@@ -559,7 +513,6 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget _loadingCard() {
     return Container(
       width: double.infinity,
-
       padding: const EdgeInsets.symmetric(vertical: 45),
 
       decoration: BoxDecoration(
@@ -580,7 +533,6 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget _errorCard() {
     return Container(
       width: double.infinity,
-
       padding: const EdgeInsets.all(20),
 
       decoration: BoxDecoration(
@@ -593,12 +545,10 @@ class _DashboardPageState extends State<DashboardPage> {
         children: [
           Container(
             padding: const EdgeInsets.all(12),
-
             decoration: BoxDecoration(
               color: Colors.red.shade50,
               shape: BoxShape.circle,
             ),
-
             child: const Icon(
               Icons.cloud_off_rounded,
               color: Colors.red,
@@ -641,13 +591,11 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget _informationCard() {
     return Container(
       width: double.infinity,
-
       padding: const EdgeInsets.all(18),
 
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-
         border: Border.all(color: Colors.grey.shade100),
       ),
 
@@ -657,12 +605,10 @@ class _DashboardPageState extends State<DashboardPage> {
           Container(
             height: 42,
             width: 42,
-
             decoration: BoxDecoration(
               color: const Color(0xFFEFF1FF),
               borderRadius: BorderRadius.circular(12),
             ),
-
             child: const Icon(
               Icons.info_outline_rounded,
               color: Color(0xFF4054C7),

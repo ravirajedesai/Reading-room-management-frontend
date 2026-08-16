@@ -1348,6 +1348,7 @@ class _StudentPageState extends State<StudentPage> {
       name: widget.name,
       mobile: widget.mobile,
       selectedPage: "Student Management",
+      role: 'STUDENT',
     );
   }
   // ============================================================
@@ -1377,7 +1378,13 @@ class _StudentPageState extends State<StudentPage> {
       // ========================================================
       // DRAWER
       // ========================================================
-      drawer: _buildDrawer(),
+      drawer: AppDrawer(
+        userId: widget.userId,
+        name: widget.name,
+        mobile: widget.mobile,
+        selectedPage: 'Student Management',
+        role: 'STUDENT',
+      ),
 
       // ========================================================
       // BODY

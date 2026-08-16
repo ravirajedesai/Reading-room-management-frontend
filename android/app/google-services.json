@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "409107405882",
+    "project_id": "reading-room-management-5475",
+    "storage_bucket": "reading-room-management-5475.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:409107405882:android:8d5599bb9c947b8fd6a903",
+        "android_client_info": {
+          "package_name": "com.example.librarymanagement"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCwOQ3ZTyH6UXI0UiC8oWKEtBj3ULr2TLo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

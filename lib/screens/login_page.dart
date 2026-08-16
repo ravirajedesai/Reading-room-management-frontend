@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 import '../services/auth_service.dart';
 import '../services/session_service.dart';
+
 import 'register_page.dart';
 import 'dashboard_page.dart';
-import 'login_page.dart';
+import 'owner_dashboard_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -14,9 +16,17 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  // ==========================================================
+  // CONTROLLERS
+  // ==========================================================
+
   final TextEditingController mobileController = TextEditingController();
 
   final TextEditingController passwordController = TextEditingController();
+
+  // ==========================================================
+  // VARIABLES
+  // ==========================================================
 
   bool loading = false;
 
@@ -55,13 +65,17 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
 
+    // ========================================================
+    // START LOADING
+    // ========================================================
+
     setState(() {
       loading = true;
     });
 
     try {
       // ======================================================
-      // API LOGIN
+      // CALL LOGIN API
       // ======================================================
 
       final response = await AuthService.login(
@@ -71,7 +85,10 @@ class _LoginPageState extends State<LoginPage> {
 
       if (!mounted) return;
 
-      debugPrint("LOGIN RESPONSE: $response");
+      debugPrint("======================================");
+      debugPrint("LOGIN RESPONSE");
+      debugPrint("$response");
+      debugPrint("======================================");
 
       // ======================================================
       // GET USER ID
@@ -98,11 +115,35 @@ class _LoginPageState extends State<LoginPage> {
           ? response['mobile'].toString()
           : mobile;
 
-      debugPrint("USER ID: $userId");
+      // ======================================================
+      // GET ROLE
+      // ======================================================
 
-      debugPrint("USER NAME: $name");
+      final String? roleValue = response['role']?.toString().trim();
 
-      debugPrint("USER MOBILE: $responseMobile");
+      final String? token = response['token']?.toString().trim();
+
+      if (roleValue == null || roleValue.isEmpty) {
+        throw Exception("Login response does not contain user role");
+      }
+
+      final String role = roleValue.toUpperCase();
+
+      // ======================================================
+      // GET JWT TOKEN
+      // ======================================================
+
+      // ======================================================
+      // DEBUG
+      // ======================================================
+
+      debugPrint("USER ID     : $userId");
+      debugPrint("USER NAME   : $name");
+      debugPrint("USER MOBILE : $responseMobile");
+      debugPrint("USER ROLE   : $role");
+      debugPrint(
+        "TOKEN       : ${token != null ? 'RECEIVED' : 'NOT RECEIVED'}",
+      );
 
       // ======================================================
       // CHECK USER ID
@@ -111,13 +152,48 @@ class _LoginPageState extends State<LoginPage> {
       if (userId == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              "Login successful, but User ID was not received from server",
-            ),
+            content: Text("Login successful, but User ID was not received"),
           ),
         );
 
         return;
+      }
+
+      // ======================================================
+      // CHECK TOKEN
+      // ======================================================
+
+      if (token == null || token.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Login successful, but JWT token was not received"),
+          ),
+        );
+
+        return;
+      }
+
+      // ======================================================
+      // SAVE FCM TOKEN
+      // ======================================================
+
+      try {
+        final String? fcmToken = await FirebaseMessaging.instance.getToken();
+
+        debugPrint("======================================");
+        debugPrint("FCM TOKEN: $fcmToken");
+        debugPrint("======================================");
+
+        if (fcmToken != null && fcmToken.isNotEmpty) {
+          await AuthService.saveFcmToken(userId: userId, token: fcmToken);
+
+          debugPrint("FCM TOKEN SAVED SUCCESSFULLY");
+        } else {
+          debugPrint("FCM TOKEN IS NULL");
+        }
+      } catch (e) {
+        // FCM failure should NOT stop login
+        debugPrint("FCM TOKEN SAVE ERROR: $e");
       }
 
       // ======================================================
@@ -128,24 +204,53 @@ class _LoginPageState extends State<LoginPage> {
         userId: userId,
         name: name,
         mobile: responseMobile,
+        role: role,
+        token: token,
       );
 
-      debugPrint("LOGIN SESSION SAVED");
+      debugPrint("LOGIN SESSION SAVED SUCCESSFULLY");
 
       // ======================================================
-      // GO TO DASHBOARD
+      // ROLE BASED DASHBOARD
       // ======================================================
 
       if (!mounted) return;
 
-      Navigator.pushReplacement(
-        context,
+      // ======================================================
+      // OWNER
+      // ======================================================
 
-        MaterialPageRoute(
-          builder: (context) =>
-              DashboardPage(userId: userId, name: name, mobile: responseMobile),
-        ),
-      );
+      if (role == 'OWNER') {
+        debugPrint("OPENING OWNER DASHBOARD");
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OwnerDashboardPage(
+              userId: userId,
+              name: name,
+              mobile: responseMobile,
+            ),
+          ),
+        );
+      }
+      // ======================================================
+      // STUDENT
+      // ======================================================
+      else {
+        debugPrint("OPENING STUDENT DASHBOARD");
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => DashboardPage(
+              userId: userId,
+              name: name,
+              mobile: responseMobile,
+            ),
+          ),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
 
@@ -185,6 +290,9 @@ class _LoginPageState extends State<LoginPage> {
     return Scaffold(
       backgroundColor: const Color(0xffF6F7FB),
 
+      // ======================================================
+      // APP BAR
+      // ======================================================
       appBar: AppBar(
         title: const Text(
           "Reading Room Management",
@@ -198,6 +306,9 @@ class _LoginPageState extends State<LoginPage> {
         foregroundColor: Colors.white,
       ),
 
+      // ======================================================
+      // BODY
+      // ======================================================
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -239,6 +350,9 @@ class _LoginPageState extends State<LoginPage> {
 
                 const SizedBox(height: 8),
 
+                // ==================================================
+                // SUBTITLE
+                // ==================================================
                 const Text(
                   "Login to manage students and seats",
 
@@ -345,7 +459,9 @@ class _LoginPageState extends State<LoginPage> {
                     child: loading
                         ? const SizedBox(
                             height: 24,
+
                             width: 24,
+
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
                               color: Colors.white,
@@ -373,7 +489,6 @@ class _LoginPageState extends State<LoginPage> {
                       : () {
                           Navigator.push(
                             context,
-
                             MaterialPageRoute(
                               builder: (context) => const RegisterPage(),
                             ),

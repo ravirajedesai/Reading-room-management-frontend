@@ -463,7 +463,8 @@ class _PaymentPageState extends State<PaymentPage> {
         userId: widget.userId,
         name: widget.name,
         mobile: widget.mobile,
-        selectedPage: 'Seat Booking',
+        selectedPage: 'Payment',
+        role: 'STUDENT', // ✅ add this
       ),
 
       appBar: AppBar(

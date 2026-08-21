@@ -63,11 +63,18 @@ class _LibrarySelectionPageState extends State<LibrarySelectionPage> {
     Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => LoginPage()));
   }
 
-  @override {
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+            appBar: AppBar(
         title: Text('Select Library'),
-        automaticallyImplyLeading: false, // Prevent going back to login
+        automaticallyImplyLeading: false,
+        actions: [
+          IconButton(
+            icon: Icon(Icons.logout),
+            onPressed: _logout,
+          ),
+        ],
       ),
       body: _isLoading
           ? Center(child: CircularProgressIndicator())

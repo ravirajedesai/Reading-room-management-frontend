@@ -4,6 +4,7 @@ import '../services/library_service.dart';
 import '../services/session_service.dart';
 import 'dashboard_page.dart';
 import 'join_library_page.dart';
+import 'login_page.dart';
 
 class LibrarySelectionPage extends StatefulWidget {
   @override
@@ -57,8 +58,12 @@ class _LibrarySelectionPageState extends State<LibrarySelectionPage> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Future<void> _logout() async {
+    await SessionService.logout();
+    Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => LoginPage()));
+  }
+
+  @override {
     return Scaffold(
       appBar: AppBar(
         title: Text('Select Library'),

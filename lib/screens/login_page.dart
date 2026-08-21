@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 
 import '../services/auth_service.dart';
 import '../services/session_service.dart';
+import '../services/notification_service.dart';
+import '../widgets/custom_text_field.dart';
 
 import 'register_page.dart';
 import 'dashboard_page.dart';
+import 'library_selection_page.dart';
 import 'owner_dashboard_page.dart';
 
 class LoginPage extends StatefulWidget {
@@ -21,53 +23,69 @@ class _LoginPageState extends State<LoginPage> {
   // ==========================================================
 
   final TextEditingController mobileController = TextEditingController();
-
   final TextEditingController passwordController = TextEditingController();
+
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   // ==========================================================
   // VARIABLES
   // ==========================================================
 
   bool loading = false;
-
   bool hidePassword = true;
+
+  String? serverError;
+
+
+  // ==========================================================
+  // VALIDATE MOBILE
+  // ==========================================================
+
+  String? _validateMobile(String? value) {
+    final mobile = value?.trim() ?? '';
+
+    if (mobile.isEmpty) {
+      return "Mobile number is required";
+    }
+
+    if (!RegExp(r'^[0-9]{10}$').hasMatch(mobile)) {
+      return "Enter a valid 10 digit mobile number";
+    }
+
+    return null;
+  }
+
+  // ==========================================================
+  // VALIDATE PASSWORD
+  // ==========================================================
+
+  String? _validatePassword(String? value) {
+    final password = value ?? '';
+
+    if (password.isEmpty) {
+      return "Password is required";
+    }
+
+    return null;
+  }
 
   // ==========================================================
   // LOGIN
   // ==========================================================
 
   Future<void> login() async {
+    FocusScope.of(context).unfocus();
+
+    setState(() {
+      serverError = null;
+    });
+
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
     final mobile = mobileController.text.trim();
-
     final password = passwordController.text;
-
-    // ========================================================
-    // VALIDATION
-    // ========================================================
-
-    if (mobile.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please enter mobile number and password"),
-        ),
-      );
-
-      return;
-    }
-
-    if (mobile.length != 10 || int.tryParse(mobile) == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please enter a valid 10 digit mobile number"),
-        ),
-      );
-
-      return;
-    }
-
-    // ========================================================
-    // START LOADING
-    // ========================================================
 
     setState(() {
       loading = true;
@@ -84,11 +102,6 @@ class _LoginPageState extends State<LoginPage> {
       );
 
       if (!mounted) return;
-
-      debugPrint("======================================");
-      debugPrint("LOGIN RESPONSE");
-      debugPrint("$response");
-      debugPrint("======================================");
 
       // ======================================================
       // GET USER ID
@@ -121,22 +134,28 @@ class _LoginPageState extends State<LoginPage> {
 
       final String? roleValue = response['role']?.toString().trim();
 
+      // ======================================================
+      // GET JWT TOKEN
+      // ======================================================
+
       final String? token = response['token']?.toString().trim();
 
+      // ======================================================
+      // CHECK ROLE
+      // ======================================================
+
       if (roleValue == null || roleValue.isEmpty) {
-        throw Exception("Login response does not contain user role");
+        throw Exception("Login response does not contain user role.");
       }
 
       final String role = roleValue.toUpperCase();
 
       // ======================================================
-      // GET JWT TOKEN
-      // ======================================================
-
-      // ======================================================
       // DEBUG
       // ======================================================
 
+      debugPrint("======================================");
+      debugPrint("LOGIN SUCCESS");
       debugPrint("USER ID     : $userId");
       debugPrint("USER NAME   : $name");
       debugPrint("USER MOBILE : $responseMobile");
@@ -144,32 +163,23 @@ class _LoginPageState extends State<LoginPage> {
       debugPrint(
         "TOKEN       : ${token != null ? 'RECEIVED' : 'NOT RECEIVED'}",
       );
+      debugPrint("======================================");
 
       // ======================================================
       // CHECK USER ID
       // ======================================================
 
       if (userId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Login successful, but User ID was not received"),
-          ),
-        );
-
+        _showError("Login successful, but User ID was not received.");
         return;
       }
 
       // ======================================================
-      // CHECK TOKEN
+      // CHECK JWT TOKEN
       // ======================================================
 
       if (token == null || token.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Login successful, but JWT token was not received"),
-          ),
-        );
-
+        _showError("Login successful, but security token was not received.");
         return;
       }
 
@@ -177,24 +187,7 @@ class _LoginPageState extends State<LoginPage> {
       // SAVE FCM TOKEN
       // ======================================================
 
-      try {
-        final String? fcmToken = await FirebaseMessaging.instance.getToken();
-
-        debugPrint("======================================");
-        debugPrint("FCM TOKEN: $fcmToken");
-        debugPrint("======================================");
-
-        if (fcmToken != null && fcmToken.isNotEmpty) {
-          await AuthService.saveFcmToken(userId: userId, token: fcmToken);
-
-          debugPrint("FCM TOKEN SAVED SUCCESSFULLY");
-        } else {
-          debugPrint("FCM TOKEN IS NULL");
-        }
-      } catch (e) {
-        // FCM failure should NOT stop login
-        debugPrint("FCM TOKEN SAVE ERROR: $e");
-      }
+      await NotificationService.initializeFcmAndSaveToken(userId);
 
       // ======================================================
       // SAVE LOGIN SESSION
@@ -210,14 +203,10 @@ class _LoginPageState extends State<LoginPage> {
 
       debugPrint("LOGIN SESSION SAVED SUCCESSFULLY");
 
-      // ======================================================
-      // ROLE BASED DASHBOARD
-      // ======================================================
-
       if (!mounted) return;
 
       // ======================================================
-      // OWNER
+      // OWNER DASHBOARD
       // ======================================================
 
       if (role == 'OWNER') {
@@ -235,30 +224,31 @@ class _LoginPageState extends State<LoginPage> {
         );
       }
       // ======================================================
-      // STUDENT
+      // STUDENT DASHBOARD
       // ======================================================
       else {
         debugPrint("OPENING STUDENT DASHBOARD");
 
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => DashboardPage(
-              userId: userId,
-              name: name,
-              mobile: responseMobile,
-            ),
-          ),
-        );
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => LibrarySelectionPage()));
       }
     } catch (e) {
       if (!mounted) return;
 
       debugPrint("LOGIN ERROR: $e");
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Login failed: $e")));
+      // ======================================================
+      // SHOW CLEAN ERROR
+      // ======================================================
+
+      String message = e.toString();
+
+      if (message.startsWith("Exception: ")) {
+        message = message.substring("Exception: ".length);
+      }
+
+      setState(() {
+        serverError = message;
+      });
     } finally {
       if (!mounted) return;
 
@@ -269,17 +259,51 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   // ==========================================================
+  // SHOW ERROR SNACKBAR
+  // ==========================================================
+
+  void _showError(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          backgroundColor: Colors.red.shade700,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  message,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+  }
+
+  // ==========================================================
   // DISPOSE
   // ==========================================================
 
   @override
   void dispose() {
     mobileController.dispose();
-
     passwordController.dispose();
 
     super.dispose();
   }
+
+  // ==========================================================
 
   // ==========================================================
   // BUILD
@@ -288,216 +312,305 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xffF6F7FB),
+      backgroundColor: const Color(0xffF5F7FB),
 
-      // ======================================================
-      // APP BAR
-      // ======================================================
-      appBar: AppBar(
-        title: const Text(
-          "Reading Room Management",
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
 
-        centerTitle: true,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
 
-        backgroundColor: Colors.indigo,
+              child: Column(
+                children: [
+                  // ==================================================
+                  // LOGO
+                  // ==================================================
+                  Container(
+                    height: 82,
+                    width: 82,
 
-        foregroundColor: Colors.white,
-      ),
-
-      // ======================================================
-      // BODY
-      // ======================================================
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 500),
-
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-
-              children: [
-                // ==================================================
-                // ICON
-                // ==================================================
-                const CircleAvatar(
-                  radius: 50,
-
-                  backgroundColor: Colors.indigo,
-
-                  child: Icon(
-                    Icons.local_library,
-                    size: 55,
-                    color: Colors.white,
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                // ==================================================
-                // TITLE
-                // ==================================================
-                const Text(
-                  "Reading Room Management",
-
-                  textAlign: TextAlign.center,
-
-                  style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
-                ),
-
-                const SizedBox(height: 8),
-
-                // ==================================================
-                // SUBTITLE
-                // ==================================================
-                const Text(
-                  "Login to manage students and seats",
-
-                  textAlign: TextAlign.center,
-
-                  style: TextStyle(fontSize: 15, color: Colors.grey),
-                ),
-
-                const SizedBox(height: 35),
-
-                // ==================================================
-                // MOBILE
-                // ==================================================
-                TextField(
-                  controller: mobileController,
-
-                  keyboardType: TextInputType.phone,
-
-                  maxLength: 10,
-
-                  decoration: InputDecoration(
-                    labelText: "Mobile Number",
-
-                    hintText: "Enter mobile number",
-
-                    prefixIcon: const Icon(Icons.phone),
-
-                    counterText: "",
-
-                    filled: true,
-
-                    fillColor: Colors.white,
-
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 18),
-
-                // ==================================================
-                // PASSWORD
-                // ==================================================
-                TextField(
-                  controller: passwordController,
-
-                  obscureText: hidePassword,
-
-                  decoration: InputDecoration(
-                    labelText: "Password",
-
-                    hintText: "Enter password",
-
-                    prefixIcon: const Icon(Icons.lock),
-
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        hidePassword ? Icons.visibility : Icons.visibility_off,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xff4F46E5), Color(0xff6366F1)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
 
-                      onPressed: () {
-                        setState(() {
-                          hidePassword = !hidePassword;
-                        });
-                      },
+                      borderRadius: BorderRadius.circular(26),
+
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xff4F46E5).withOpacity(0.25),
+                          blurRadius: 25,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
                     ),
 
-                    filled: true,
-
-                    fillColor: Colors.white,
-
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                    child: const Icon(
+                      Icons.local_library_rounded,
+                      size: 44,
+                      color: Colors.white,
                     ),
                   ),
-                ),
 
-                const SizedBox(height: 25),
+                  const SizedBox(height: 22),
 
-                // ==================================================
-                // LOGIN BUTTON
-                // ==================================================
-                SizedBox(
-                  width: double.infinity,
+                  // ==================================================
+                  // TITLE
+                  // ==================================================
+                  const Text(
+                    "Welcome Back",
+                    style: TextStyle(
+                      fontSize: 30,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xff111827),
+                    ),
+                  ),
 
-                  height: 52,
+                  const SizedBox(height: 8),
 
-                  child: ElevatedButton(
-                    onPressed: loading ? null : login,
+                  const Text(
+                    "Login to manage your reading room",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14, color: Color(0xff6B7280)),
+                  ),
 
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.indigo,
+                  const SizedBox(height: 28),
 
-                      foregroundColor: Colors.white,
+                  // ==================================================
+                  // CARD
+                  // ==================================================
+                  Container(
+                    padding: const EdgeInsets.all(24),
 
-                      disabledBackgroundColor: Colors.grey.shade300,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
 
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.06),
+                          blurRadius: 30,
+                          offset: const Offset(0, 12),
+                        ),
+                      ],
                     ),
 
-                    child: loading
-                        ? const SizedBox(
-                            height: 24,
+                    child: Form(
+                      key: _formKey,
 
-                            width: 24,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
 
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
+                        children: [
+                          // ========================================
+                          // SERVER ERROR
+                          // ========================================
+                          if (serverError != null) ...[
+                            Container(
+                              padding: const EdgeInsets.all(14),
+
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade50,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: Colors.red.shade100),
+                              ),
+
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+
+                                children: [
+                                  Icon(
+                                    Icons.error_outline_rounded,
+                                    color: Colors.red.shade700,
+                                  ),
+
+                                  const SizedBox(width: 10),
+
+                                  Expanded(
+                                    child: Text(
+                                      serverError!,
+                                      style: TextStyle(
+                                        color: Colors.red.shade800,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          )
-                        : const Text(
-                            "LOGIN",
 
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
+                            const SizedBox(height: 20),
+                          ],
+
+                          // ========================================
+                          // MOBILE
+                          // ========================================
+                          CustomTextField(
+                            controller: mobileController,
+                            label: "Mobile Number",
+                            hint: "Enter 10 digit mobile number",
+                            icon: Icons.phone_rounded,
+                            keyboardType: TextInputType.phone,
+                            maxLength: 10,
+                            validator: _validateMobile,
+                            onChanged: (_) {
+                              if (serverError != null) {
+                                setState(() {
+                                  serverError = null;
+                                });
+                              }
+                            },
+                          ),
+
+                          const SizedBox(height: 18),
+
+                          // ========================================
+                          // PASSWORD
+                          // ========================================
+                          CustomTextField(
+                            controller: passwordController,
+                            obscureText: hidePassword,
+                            label: "Password",
+                            hint: "Enter your password",
+                            icon: Icons.lock_rounded,
+                            validator: _validatePassword,
+                            onChanged: (_) {
+                              if (serverError != null) {
+                                setState(() {
+                                  serverError = null;
+                                });
+                              }
+                            },
+                            suffixIcon: IconButton(
+                              tooltip: hidePassword
+                                  ? "Show password"
+                                  : "Hide password",
+                              icon: Icon(
+                                hidePassword
+                                    ? Icons.visibility_off_rounded
+                                    : Icons.visibility_rounded,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  hidePassword = !hidePassword;
+                                });
+                              },
                             ),
                           ),
-                  ),
-                ),
 
-                const SizedBox(height: 15),
+                          const SizedBox(height: 26),
 
-                // ==================================================
-                // REGISTER
-                // ==================================================
-                TextButton(
-                  onPressed: loading
-                      ? null
-                      : () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const RegisterPage(),
+                          // ========================================
+                          // LOGIN BUTTON
+                          // ========================================
+                          SizedBox(
+                            height: 56,
+
+                            child: ElevatedButton(
+                              onPressed: loading ? null : login,
+
+                              style: ElevatedButton.styleFrom(
+                                elevation: 0,
+
+                                backgroundColor: const Color(0xff4F46E5),
+
+                                foregroundColor: Colors.white,
+
+                                disabledBackgroundColor: Colors.grey.shade300,
+
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+
+                              child: loading
+                                  ? const SizedBox(
+                                      height: 24,
+                                      width: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.5,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+
+                                      children: [
+                                        Text(
+                                          "Login",
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+
+                                        SizedBox(width: 8),
+
+                                        Icon(
+                                          Icons.arrow_forward_rounded,
+                                          size: 20,
+                                        ),
+                                      ],
+                                    ),
                             ),
-                          );
-                        },
+                          ),
 
-                  child: const Text("Don't have an account? Register"),
-                ),
-              ],
+                          const SizedBox(height: 20),
+
+                          // ========================================
+                          // REGISTER
+                          // ========================================
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+
+                            children: [
+                              const Text(
+                                "Don't have an account? ",
+                                style: TextStyle(color: Color(0xff6B7280)),
+                              ),
+
+                              GestureDetector(
+                                onTap: loading
+                                    ? null
+                                    : () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) =>
+                                                const RegisterPage(),
+                                          ),
+                                        );
+                                      },
+
+                                child: const Text(
+                                  "Register",
+                                  style: TextStyle(
+                                    color: Color(0xff4F46E5),
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  const Text(
+                    "Secure access to your reading room",
+                    style: TextStyle(fontSize: 12, color: Color(0xff9CA3AF)),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -505,3 +618,4 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 }
+

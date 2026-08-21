@@ -1,132 +1,221 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
 import '../models/booking_model.dart';
+import '../models/payment_model.dart';
 import 'session_service.dart';
-
-class BookingException implements Exception {
-  final String message;
-  final int? statusCode;
-
-  BookingException({required this.message, this.statusCode});
-
-  @override
-  String toString() => message;
-}
 
 class BookingService {
   static const String baseUrl =
-      "https://automatic-library-management.onrender.com";
+      'https://automatic-library-management-git-409107405882.asia-south1.run.app';
 
-  // ============================================================
-  // HOLD SEAT
-  // ============================================================
+  // =========================================================
+  // HEADERS
+  // =========================================================
 
-  Future<Booking> holdSeat({required int userId, required int seatId}) async {
-    // Get JWT saved during login
-    final String? token = await SessionService.getToken();
-
-    print("======================================");
-    print("HOLD SEAT");
-    print("USER ID: $userId");
-    print("SEAT ID: $seatId");
-    print(
-      "JWT: ${token != null && token.isNotEmpty ? 'AVAILABLE' : 'MISSING'}",
-    );
-    print("======================================");
+  static Future<Map<String, String>> _headers() async {
+    final token = await SessionService.getToken();
 
     if (token == null || token.isEmpty) {
-      throw BookingException(
-        message: "Login session expired. Please login again.",
-      );
+      throw Exception('User session expired. Please login again.');
     }
 
-    final response = await http.post(
-      Uri.parse('$baseUrl/bookings/hold'),
+    final Map<String, String> headers = {
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+    };
+    final libraryId = await SessionService.getActiveLibraryId();
+    if (libraryId != null) {
+      headers['X-Library-ID'] = libraryId.toString();
+    }
+    return headers;
+  }
 
-      headers: {
-        'Content-Type': 'application/json',
+  // =========================================================
+  // HOLD SEAT
+  // =========================================================
 
-        // JWT authentication
-        'Authorization': 'Bearer $token',
+  Future<Map<String, dynamic>> holdSeat(int seatId) async {
+    final userId = await SessionService.getUserId();
 
-        // Keep this if your backend still uses it
-        'X-USER-ID': userId.toString(),
-      },
+    if (userId == null) {
+      throw Exception('User session expired. Please login again.');
+    }
 
-      body: jsonEncode({'seatId': seatId}),
-    );
+    final headers = await _headers();
+    headers['X-USER-ID'] = userId.toString();
 
-    print("HOLD SEAT STATUS: ${response.statusCode}");
-    print("HOLD SEAT RESPONSE: ${response.body}");
-
-    // ============================================================
-    // SUCCESS
-    // ============================================================
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/bookings/hold'),
+          headers: headers,
+          body: jsonEncode({'seatId': seatId}),
+        )
+        .timeout(const Duration(seconds: 30));
 
     if (response.statusCode == 200 || response.statusCode == 201) {
-      try {
-        final data = jsonDecode(response.body);
+      if (response.body.trim().isEmpty) {
+        throw Exception('Server returned an empty booking response.');
+      }
 
-        return Booking.fromJson(data);
-      } catch (e) {
-        throw BookingException(
-          message: "Invalid booking response from server.",
-          statusCode: response.statusCode,
-        );
+      final decoded = jsonDecode(response.body);
+
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+
+      return Map<String, dynamic>.from(decoded);
+    }
+
+    throw Exception(_extractError(response, 'Failed to hold seat'));
+  }
+
+  // =========================================================
+  // GET MY BOOKING
+  // =========================================================
+
+  Future<Booking?> getMyBooking() async {
+    final userId = await SessionService.getUserId();
+
+    if (userId == null) {
+      throw Exception('User session expired. Please login again.');
+    }
+
+    final headers = await _headers();
+    headers['X-USER-ID'] = userId.toString();
+
+    final response = await http
+        .get(
+          Uri.parse('$baseUrl/bookings/my-booking/$userId'),
+          headers: headers,
+        )
+        .timeout(const Duration(seconds: 30));
+
+    if (response.statusCode == 200) {
+      if (response.body.trim().isEmpty || response.body.trim() == 'null') {
+        return null;
+      }
+
+      final decoded = jsonDecode(response.body);
+
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Invalid booking response.');
+      }
+
+      return Booking.fromJson(decoded);
+    }
+
+    if (response.statusCode == 400 || response.statusCode == 404) {
+      final body = response.body.toLowerCase();
+
+      if (body.contains('no active or pending booking') ||
+          body.contains('booking not found') ||
+          body.contains('no booking')) {
+        return null;
       }
     }
 
-    // ============================================================
-    // ERROR MESSAGE
-    // ============================================================
+    throw Exception(_extractError(response, 'Failed to load booking'));
+  }
 
-    String message = "Unable to create booking";
+  // =========================================================
+  // PAYMENT NOTIFICATION
+  // =========================================================
 
+  Future<Payment?> getPaymentNotification() async {
+    final booking = await getMyBooking();
+
+    if (booking == null) {
+      return null;
+    }
+
+    final approvalStatus = booking.approvalStatus;
+
+    if (approvalStatus == PaymentApprovalStatus.approved ||
+        approvalStatus == PaymentApprovalStatus.rejected) {
+      return Payment(
+        id: booking.paymentId,
+        userId: booking.userId,
+        bookingId: booking.id,
+        amount: booking.amount,
+        studentName: booking.studentName,
+        seatNumber: booking.seatNumber?.toString(),
+        status: booking.paymentStatus,
+        paymentMethod: booking.paymentMethod,
+        approvalStatus: booking.approvalStatus,
+        paymentType: booking.paymentType,
+        transactionId: booking.transactionId,
+        paidAt: booking.paidAt,
+      );
+    }
+
+    return null;
+  }
+
+  // =========================================================
+  // CANCEL PENDING BOOKING (STUDENT SELF-CANCEL)
+  // Matches Spring Boot: PUT /bookings/cancel/{bookingId}/{userId}
+  // =========================================================
+
+  Future<void> cancelPendingBooking({
+    required int bookingId,
+    int? userId,
+  }) async {
+    // 1. Resolve User ID
+    final resolvedUserId = userId ?? await SessionService.getUserId();
+
+    if (resolvedUserId == null) {
+      throw Exception('User session expired. Please login again.');
+    }
+
+    final headers = await _headers();
+    headers['X-USER-ID'] = resolvedUserId.toString();
+
+    // 2. Calls PUT endpoint on backend
+    final response = await http
+        .put(
+          Uri.parse('$baseUrl/bookings/cancel/$bookingId/$resolvedUserId'),
+          headers: headers,
+        )
+        .timeout(const Duration(seconds: 30));
+
+    print("CANCEL BOOKING STATUS: ${response.statusCode}");
+    print("CANCEL BOOKING BODY: ${response.body}");
+
+    if (response.statusCode == 200 || response.statusCode == 204) {
+      return;
+    }
+
+    throw Exception(_extractError(response, 'Failed to cancel booking'));
+  }
+
+  // =========================================================
+  // ERROR EXTRACTION
+  // =========================================================
+
+  String _extractError(http.Response response, String defaultMessage) {
     try {
-      if (response.body.isNotEmpty) {
-        final data = jsonDecode(response.body);
+      if (response.body.trim().isNotEmpty) {
+        final decoded = jsonDecode(response.body);
 
-        if (data is Map<String, dynamic>) {
-          if (data['message'] != null &&
-              data['message'].toString().trim().isNotEmpty) {
-            message = data['message'].toString();
-          } else if (data['error'] != null &&
-              data['error'].toString().trim().isNotEmpty) {
-            message = data['error'].toString();
-          } else if (data['detail'] != null &&
-              data['detail'].toString().trim().isNotEmpty) {
-            message = data['detail'].toString();
+        if (decoded is Map<String, dynamic>) {
+          if (decoded['message'] != null) {
+            return decoded['message'].toString();
           }
-        } else {
-          message = response.body;
+
+          if (decoded['error'] != null) {
+            return decoded['error'].toString();
+          }
+
+          if (decoded['detail'] != null) {
+            return decoded['detail'].toString();
+          }
         }
       }
-    } catch (e) {
-      if (response.body.isNotEmpty) {
-        message = response.body;
-      }
-    }
+    } catch (_) {}
 
-    // ============================================================
-    // 401 / 403
-    // ============================================================
-
-    if (response.statusCode == 401) {
-      throw BookingException(
-        message: "Unauthorized. Please login again.",
-        statusCode: 401,
-      );
-    }
-
-    if (response.statusCode == 403) {
-      throw BookingException(
-        message: "Access denied. Your login session may be invalid.",
-        statusCode: 403,
-      );
-    }
-
-    throw BookingException(message: message, statusCode: response.statusCode);
+    return '$defaultMessage (${response.statusCode})';
   }
 }
+

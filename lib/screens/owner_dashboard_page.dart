@@ -4,6 +4,11 @@ import '../widgets/app_drawer.dart';
 import '../services/owner_service.dart';
 import '../services/session_service.dart';
 
+import '../screens/paid_students_page.dart';
+import '../screens/payment_history_page.dart';
+import '../screens/owner_pending_payments_page.dart';
+import '../screens/owner_pending_seats_page.dart';
+
 class OwnerDashboardPage extends StatefulWidget {
   final int userId;
   final String name;
@@ -21,19 +26,20 @@ class OwnerDashboardPage extends StatefulWidget {
 }
 
 class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
-  // =========================================================
-  // DATA
-  // =========================================================
+  // Total capacity of the reading room
+  static const int totalSeatCapacity = 100;
 
   int _totalPaidStudents = 0;
-  double _totalMonthCollection = 0;
-  bool _hasCache = false;
+  double _totalMonthCollection = 0.0;
+  double _cashCollection = 0.0;
+  int _pendingPaymentRequests = 0;
+  int _pendingSeats = 0;
+
   bool loadingDashboard = true;
+  bool _hasCache = false;
   String? dashboardError;
 
-  // =========================================================
-  // INIT
-  // =========================================================
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
@@ -41,18 +47,13 @@ class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
     loadDashboard();
   }
 
-  // =========================================================
-  // LOAD DASHBOARD
-  // =========================================================
-
   Future<void> loadDashboard() async {
     if (!_hasCache) {
-      if (mounted) {
-        setState(() {
-          loadingDashboard = true;
-          dashboardError = null;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        loadingDashboard = true;
+        dashboardError = null;
+      });
     }
 
     try {
@@ -68,23 +69,103 @@ class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
       }
 
       final stats = await OwnerService.getDashboardStats(token);
+      _totalPaidStudents = (stats['totalPaidStudents'] as num?)?.toInt() ?? 0;
+      _totalMonthCollection =
+          (stats['totalMonthCollection'] as num?)?.toDouble() ?? 0.0;
+      _cashCollection = (stats['cashCollection'] as num?)?.toDouble() ?? 0.0;
+
+      try {
+        final pendingPayments = await OwnerService.getPendingPaymentRequests(
+          token,
+          widget.userId,
+        );
+        _pendingPaymentRequests = pendingPayments.length;
+      } catch (e) {
+        debugPrint('PENDING PAYMENT REQUEST ERROR: $e');
+        _pendingPaymentRequests = 0;
+      }
+
+      try {
+        final pendingBookings = await OwnerService.getPendingBookings(
+          token,
+          widget.userId,
+        );
+        _pendingSeats = pendingBookings.length;
+      } catch (e) {
+        debugPrint('PENDING SEATS ERROR: $e');
+        _pendingSeats = 0;
+      }
 
       if (!mounted) return;
-
       setState(() {
-        _totalPaidStudents = (stats['totalPaidStudents'] as num).toInt();
-        _totalMonthCollection = (stats['totalMonthCollection'] as num)
-            .toDouble();
         _hasCache = true;
         loadingDashboard = false;
+        dashboardError = null;
       });
     } catch (e) {
+      debugPrint('OWNER DASHBOARD ERROR: $e');
       if (!mounted) return;
       setState(() {
         loadingDashboard = false;
-        if (!_hasCache) dashboardError = e.toString();
+        if (!_hasCache) {
+          dashboardError = 'Unable to load dashboard.';
+        }
       });
     }
+  }
+
+  void _openPaidStudents() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PaidStudentsPage(
+          userId: widget.userId,
+          name: widget.name,
+          mobile: widget.mobile,
+          role: 'OWNER',
+        ),
+      ),
+    );
+  }
+
+  void _openPaymentHistory() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PaymentHistoryPage(
+          userId: widget.userId,
+          name: widget.name,
+          mobile: widget.mobile,
+          role: 'OWNER',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openPendingPaymentRequests() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => OwnerPendingPaymentsPage(
+          userId: widget.userId,
+          name: widget.name,
+          mobile: widget.mobile,
+          role: 'OWNER',
+        ),
+      ),
+    );
+    await loadDashboard();
+  }
+
+  Future<void> _openPendingSeats() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => OwnerPendingSeatsPage(
+          userId: widget.userId,
+          name: widget.name,
+          mobile: widget.mobile,
+          role: 'OWNER',
+        ),
+      ),
+    );
+    await loadDashboard();
   }
 
   // =========================================================
@@ -94,11 +175,8 @@ class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB),
-
-      // =====================================================
-      // DRAWER
-      // =====================================================
+      key: _scaffoldKey,
+      backgroundColor: const Color(0xFFF8FAFC),
       drawer: AppDrawer(
         userId: widget.userId,
         name: widget.name,
@@ -106,1281 +184,913 @@ class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
         selectedPage: 'Dashboard',
         role: 'OWNER',
       ),
-
-      // =====================================================
-      // APP BAR
-      // =====================================================
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF172033),
-        elevation: 0,
-        centerTitle: false,
-
-        title: const Text(
-          'Reading Room',
-          style: TextStyle(
-            fontSize: 21,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF172033),
-          ),
-        ),
-
-        actions: [
-          IconButton(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('No new notifications')),
-              );
-            },
-            icon: const Icon(
-              Icons.notifications_none_rounded,
-              color: Color(0xFF172033),
-            ),
-          ),
-
-          const SizedBox(width: 5),
-
-          Padding(
-            padding: const EdgeInsets.only(right: 15),
-            child: CircleAvatar(
-              radius: 19,
-              backgroundColor: const Color(0xFFE8ECFF),
-              child: Text(
-                widget.name.isNotEmpty ? widget.name[0].toUpperCase() : 'O',
-                style: const TextStyle(
-                  color: Color(0xFF4054C7),
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-
-      // =====================================================
-      // BODY
-      // =====================================================
+      appBar: _buildAppBar(),
       body: SafeArea(
         child: RefreshIndicator(
+          color: const Color(0xFF3B50DF),
           onRefresh: loadDashboard,
-
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(18, 20, 18, 30),
-
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-
               children: [
-                // ==============================================
-                // WELCOME
-                // ==============================================
-                _welcomeSection(),
-
-                const SizedBox(height: 28),
-
-                // ==============================================
-                // OVERVIEW TITLE
-                // ==============================================
-                const Text(
-                  'Overview',
-                  style: TextStyle(
-                    fontSize: 21,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF172033),
-                  ),
-                ),
-
-                const SizedBox(height: 5),
-
-                Text(
-                  'Current reading room statistics',
-                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-                ),
-
+                // Top Greeting
+                _buildHeader(),
                 const SizedBox(height: 16),
 
-                // ==============================================
-                // STATS
-                // ==============================================
+                // Error / Loading / Content State
                 if (dashboardError != null)
-                  _errorCard()
-                else
-                  _ownerStatistics(),
+                  _buildErrorCard()
+                else if (loadingDashboard && !_hasCache)
+                  _buildLoadingCard()
+                else ...[
+                  // Hero Revenue Card
+                  _buildRevenueHeroCard(),
+                  const SizedBox(height: 14),
 
-                const SizedBox(height: 25),
+                  // Booked Seats Card
+                  _buildBookedSeatsCard(),
+                  const SizedBox(height: 20),
 
-                // ==============================================
-                // MANAGEMENT TITLE
-                // ==============================================
-                const Text(
-                  'Management',
-                  style: TextStyle(
-                    fontSize: 21,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF172033),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // ==============================================
-                // SEARCH STUDENT BUTTON
-                // ==============================================
-                _featureButton(
-                  icon: Icons.search_rounded,
-                  title: 'Search Paid Student History',
-                  subtitle: 'Search payment history by mobile number',
-                  iconColor: const Color(0xFF4054C7),
-                  backgroundColor: const Color(0xFFEFF1FF),
-                  onTap: () => _showSearchStudent(),
-                ),
-
-                const SizedBox(height: 25),
-
-                // ==============================================
-                // INFO CARD
-                // ==============================================
-                _informationCard(),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ===========================================================
-  // WELCOME SECTION
-  // ===========================================================
-
-  Widget _welcomeSection() {
-    final firstLetter = widget.name.isNotEmpty
-        ? widget.name.substring(0, 1).toUpperCase()
-        : 'O';
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(22),
-
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF4054C7), Color(0xFF6575D6)],
-        ),
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.indigo.withOpacity(0.18),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-
-      child: Row(
-        children: [
-          // ===================================================
-          // AVATAR
-          // ===================================================
-          Container(
-            height: 58,
-            width: 58,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.18),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: Colors.white.withOpacity(0.25),
-                width: 1,
-              ),
-            ),
-            child: Center(
-              child: Text(
-                firstLetter,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 25,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
-
-          const SizedBox(width: 16),
-
-          // ===================================================
-          // DETAILS
-          // ===================================================
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Welcome back 👋',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.82),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-
-                const SizedBox(height: 5),
-
-                Text(
-                  widget.name.isNotEmpty ? widget.name : 'Owner',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 21,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-
-                const SizedBox(height: 5),
-
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.admin_panel_settings_outlined,
-                      size: 14,
-                      color: Colors.white70,
-                    ),
-                    const SizedBox(width: 5),
-                    const Text(
-                      'Owner',
-                      style: TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ===========================================================
-  // OWNER STATISTICS
-  // ===========================================================
-
-  Widget _ownerStatistics() {
-    if (loadingDashboard) return _loadingCard();
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isSmallScreen = constraints.maxWidth < 500;
-
-        if (isSmallScreen) {
-          return Column(
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: _statCard(
-                      icon: Icons.verified_user_rounded,
-                      title: 'Paid Students',
-                      value: _totalPaidStudents.toString(),
-                      description: 'Active this month',
-                      iconColor: const Color(0xFF159570),
-                      backgroundColor: const Color(0xFFE8F8F2),
+                  // Operational Section Header
+                  const Text(
+                    'Operational Overview',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF0F172A),
                     ),
                   ),
+                  const SizedBox(height: 12),
 
-                  const SizedBox(width: 12),
+                  // Equal Height Metrics Grid
+                  _buildMetricsGrid(),
+                  const SizedBox(height: 20),
 
-                  Expanded(
-                    child: _statCard(
-                      icon: Icons.currency_rupee_rounded,
-                      title: 'This Month',
-                      value: '₹${_totalMonthCollection.toStringAsFixed(0)}',
-                      description: 'Total collection',
-                      iconColor: const Color(0xFF4054C7),
-                      backgroundColor: const Color(0xFFEFF1FF),
+                  // Quick Action Shortcuts Header
+                  const Text(
+                    'Quick Actions',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF0F172A),
                     ),
                   ),
+                  const SizedBox(height: 12),
+
+                  // Equal Height Quick Action Shortcuts
+                  _buildQuickActions(),
                 ],
-              ),
-            ],
-          );
-        }
-
-        return Row(
-          children: [
-            Expanded(
-              child: _statCard(
-                icon: Icons.verified_user_rounded,
-                title: 'Paid Students',
-                value: _totalPaidStudents.toString(),
-                description: 'Active this month',
-                iconColor: const Color(0xFF159570),
-                backgroundColor: const Color(0xFFE8F8F2),
-              ),
-            ),
-
-            const SizedBox(width: 14),
-
-            Expanded(
-              child: _statCard(
-                icon: Icons.currency_rupee_rounded,
-                title: 'This Month',
-                value: '₹${_totalMonthCollection.toStringAsFixed(0)}',
-                description: 'Total collection',
-                iconColor: const Color(0xFF4054C7),
-                backgroundColor: const Color(0xFFEFF1FF),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // ===========================================================
-  // STAT CARD
-  // ===========================================================
-
-  Widget _statCard({
-    required IconData icon,
-    required String title,
-    required String value,
-    required String description,
-    required Color iconColor,
-    required Color backgroundColor,
-  }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.grey.shade100),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.045),
-            blurRadius: 12,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            height: 46,
-            width: 46,
-            decoration: BoxDecoration(
-              color: backgroundColor,
-              borderRadius: BorderRadius.circular(13),
-            ),
-            child: Icon(icon, color: iconColor, size: 23),
-          ),
-
-          const SizedBox(height: 15),
-
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF172033),
+              ],
             ),
           ),
-
-          const SizedBox(height: 3),
-
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF30384D),
-            ),
-          ),
-
-          const SizedBox(height: 3),
-
-          Text(
-            description,
-            style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ===========================================================
-  // FEATURE BUTTON
-  // ===========================================================
-
-  Widget _featureButton({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Color iconColor,
-    required Color backgroundColor,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(18),
-
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.grey.shade100),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.045),
-              blurRadius: 12,
-              offset: const Offset(0, 5),
-            ),
-          ],
         ),
+      ),
+    );
+  }
 
-        child: Row(
+  // ===========================================================
+  // APP BAR
+  // ===========================================================
+
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      backgroundColor: Colors.white,
+      foregroundColor: const Color(0xFF0F172A),
+      elevation: 0,
+      scrolledUnderElevation: 0.5,
+      leading: IconButton(
+        tooltip: 'Menu',
+        icon: const Icon(Icons.menu_rounded, size: 26),
+        onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+      ),
+      titleSpacing: 0,
+      title: const Text(
+        'Reading Room',
+        style: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w800,
+          color: Color(0xFF0F172A),
+          letterSpacing: -0.3,
+        ),
+      ),
+      actions: [
+        // Notification Pill
+        Stack(
+          alignment: Alignment.center,
           children: [
             Container(
-              height: 46,
-              width: 46,
+              margin: const EdgeInsets.only(right: 6),
               decoration: BoxDecoration(
-                color: backgroundColor,
-                borderRadius: BorderRadius.circular(13),
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: iconColor, size: 23),
-            ),
-
-            const SizedBox(width: 14),
-
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF172033),
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    subtitle,
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-                  ),
-                ],
+              child: IconButton(
+                tooltip: 'Pending Requests',
+                onPressed: () {
+                  if (_pendingPaymentRequests > 0) {
+                    _openPendingPaymentRequests();
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('No pending payment requests'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                },
+                icon: const Icon(
+                  Icons.notifications_outlined,
+                  color: Color(0xFF334155),
+                  size: 22,
+                ),
               ),
             ),
-
-            Icon(
-              Icons.arrow_forward_ios_rounded,
-              size: 16,
-              color: Colors.grey.shade400,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ===========================================================
-  // LOADING CARD
-  // ===========================================================
-
-  Widget _loadingCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 45),
-
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-      ),
-
-      child: const Center(
-        child: CircularProgressIndicator(color: Color(0xFF4054C7)),
-      ),
-    );
-  }
-
-  // ===========================================================
-  // ERROR CARD
-  // ===========================================================
-
-  Widget _errorCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.red.shade100),
-      ),
-
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.red.shade50,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.cloud_off_rounded,
-              color: Colors.red,
-              size: 30,
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          const Text(
-            'Unable to load dashboard',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-          ),
-
-          const SizedBox(height: 5),
-
-          Text(
-            'Please check your internet connection.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-          ),
-
-          const SizedBox(height: 14),
-
-          OutlinedButton.icon(
-            onPressed: loadDashboard,
-            icon: const Icon(Icons.refresh),
-            label: const Text('Retry'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ===========================================================
-  // INFORMATION CARD
-  // ===========================================================
-
-  Widget _informationCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.grey.shade100),
-      ),
-
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            height: 42,
-            width: 42,
-            decoration: BoxDecoration(
-              color: const Color(0xFFEFF1FF),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.info_outline_rounded,
-              color: Color(0xFF4054C7),
-            ),
-          ),
-
-          const SizedBox(width: 13),
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Reading Room',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF172033),
-                  ),
-                ),
-
-                const SizedBox(height: 5),
-
-                Text(
-                  'Manage students, track payments, and monitor seat bookings.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    height: 1.4,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ===========================================================
-  // SHOW SEARCH STUDENT BOTTOM SHEET
-  // ===========================================================
-
-  void _showSearchStudent() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => const _SearchStudentSheet(),
-    );
-  }
-}
-
-// =============================================================
-// SEARCH STUDENT BOTTOM SHEET
-// =============================================================
-
-class _SearchStudentSheet extends StatefulWidget {
-  const _SearchStudentSheet();
-
-  @override
-  State<_SearchStudentSheet> createState() => _SearchStudentSheetState();
-}
-
-class _SearchStudentSheetState extends State<_SearchStudentSheet> {
-  final TextEditingController _mobileController = TextEditingController();
-
-  List<dynamic> _history = [];
-  bool _loading = false;
-  bool _searched = false;
-  String? _error;
-  String _searchedName = '';
-
-  Future<void> _search() async {
-    final mobile = _mobileController.text.trim();
-
-    if (mobile.isEmpty || mobile.length != 10) {
-      setState(() {
-        _error = 'Please enter a valid 10-digit mobile number.';
-      });
-      return;
-    }
-
-    setState(() {
-      _loading = true;
-      _error = null;
-      _history = [];
-      _searched = false;
-      _searchedName = '';
-    });
-
-    try {
-      final token = await SessionService.getToken();
-
-      if (token == null || token.isEmpty) {
-        setState(() {
-          _error = 'Session expired. Please login again.';
-          _loading = false;
-        });
-        return;
-      }
-
-      final result = await OwnerService.getUserPaymentHistory(token, mobile);
-
-      setState(() {
-        _history = result;
-        _loading = false;
-        _searched = true;
-        if (result.isNotEmpty) {
-          _searchedName = result[0]['name']?.toString() ?? '';
-        }
-      });
-    } catch (e) {
-      setState(() {
-        _loading = false;
-        _error = 'No payment history found for this number.';
-        _searched = true;
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _mobileController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.9,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      builder: (context, scrollController) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFFF6F7FB),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-
-          child: Column(
-            children: [
-              // ===============================================
-              // HANDLE
-              // ===============================================
-              Padding(
-                padding: const EdgeInsets.only(top: 12, bottom: 8),
+            if (_pendingPaymentRequests > 0)
+              Positioned(
+                right: 8,
+                top: 8,
                 child: Container(
-                  width: 40,
-                  height: 4,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2),
+                    color: const Color(0xFFEF4444),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                  child: Text(
+                    '$_pendingPaymentRequests',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
               ),
-
-              // ===============================================
-              // HEADER
-              // ===============================================
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-                child: Row(
-                  children: [
-                    Container(
-                      height: 42,
-                      width: 42,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEFF1FF),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.search_rounded,
-                        color: Color(0xFF4054C7),
-                        size: 22,
-                      ),
-                    ),
-
-                    const SizedBox(width: 12),
-
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Payment History',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF172033),
-                            ),
-                          ),
-                          Text(
-                            'Search by mobile number',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close_rounded),
-                      color: Colors.grey.shade600,
-                    ),
-                  ],
-                ),
-              ),
-
-              const Divider(height: 1),
-
-              // ===============================================
-              // SEARCH BOX
-              // ===============================================
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _mobileController,
-                        keyboardType: TextInputType.phone,
-                        maxLength: 10,
-                        decoration: InputDecoration(
-                          hintText: 'Enter mobile number',
-                          prefixIcon: const Icon(Icons.phone_outlined),
-                          counterText: '',
-                          filled: true,
-                          fillColor: Colors.white,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 14,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(color: Colors.grey.shade200),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(color: Colors.grey.shade200),
-                          ),
-                        ),
-                        onSubmitted: (_) => _search(),
-                      ),
-                    ),
-
-                    const SizedBox(width: 10),
-
-                    SizedBox(
-                      height: 52,
-                      child: ElevatedButton(
-                        onPressed: _loading ? null : _search,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF4054C7),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 18),
-                        ),
-                        child: _loading
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.search_rounded),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // ===============================================
-              // ERROR
-              // ===============================================
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.red.shade100),
-                    ),
-                    child: Text(
-                      _error!,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.red.shade700,
-                      ),
-                    ),
-                  ),
-                ),
-
-              // ===============================================
-              // RESULTS
-              // ===============================================
-              Expanded(
-                child: _searched
-                    ? _history.isEmpty
-                          ? _emptyState()
-                          : ListView.builder(
-                              controller: scrollController,
-                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                              itemCount: _history.length + 1,
-                              itemBuilder: (context, index) {
-                                if (index == 0) {
-                                  return _studentSummaryHeader();
-                                }
-                                return _historyCard(_history[index - 1]);
-                              },
-                            )
-                    : _placeholderState(),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _studentSummaryHeader() {
-    if (_history.isEmpty) return const SizedBox();
-
-    final first = _history[0];
-    final name = first['name']?.toString() ?? 'Unknown';
-    final mobile = first['mobile']?.toString() ?? '-';
-
-    double total = 0;
-    for (final h in _history) {
-      total += double.tryParse(h['amount']?.toString() ?? '0') ?? 0;
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(16),
-
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF4054C7), Color(0xFF6575D6)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+          ],
         ),
-        borderRadius: BorderRadius.circular(16),
-      ),
 
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: Colors.white.withOpacity(0.2),
+        // User Avatar
+        Padding(
+          padding: const EdgeInsets.only(right: 16, left: 4),
+          child: CircleAvatar(
+            radius: 18,
+            backgroundColor: const Color(0xFFEEF2FF),
             child: Text(
-              name.isNotEmpty ? name[0].toUpperCase() : 'S',
+              widget.name.trim().isNotEmpty
+                  ? widget.name.trim()[0].toUpperCase()
+                  : 'O',
               style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
+                color: Color(0xFF3B50DF),
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
               ),
             ),
           ),
-
-          const SizedBox(width: 12),
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-                Text(
-                  mobile,
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '₹${total.toStringAsFixed(0)}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
-              const Text(
-                'Total paid',
-                style: TextStyle(color: Colors.white70, fontSize: 11),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _historyCard(dynamic item) {
-    final bookingId = item['bookingId']?.toString() ?? '-';
-    final seatId = item['seatId']?.toString() ?? '-';
-    final amount = item['amount']?.toString() ?? '0';
-    final paymentMethod = item['paymentMethod']?.toString() ?? '-';
-    final transactionId = item['transactionId']?.toString() ?? '-';
-    final paymentStatus = item['paymentStatus']?.toString() ?? '-';
-    final startDate = _formatDate(item['startDate']?.toString());
-    final endDate = _formatDate(item['endDate']?.toString());
-    final paidAt = _formatDateTime(item['paidAt']?.toString());
-
-    final isSuccess = paymentStatus.toUpperCase() == 'SUCCESS';
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade100),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // BOOKING HEADER
-          Row(
-            children: [
-              Text(
-                'Booking #$bookingId',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF172033),
-                ),
-              ),
-
-              const Spacer(),
-
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: isSuccess
-                      ? const Color(0xFFE8F8F2)
-                      : Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  isSuccess ? 'Paid' : paymentStatus,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: isSuccess ? const Color(0xFF159570) : Colors.orange,
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 12),
-          Divider(color: Colors.grey.shade100, height: 1),
-          const SizedBox(height: 12),
-
-          // DETAILS
-          Row(
-            children: [
-              Expanded(
-                child: _detailItem(
-                  label: 'Seat',
-                  value: 'Seat $seatId',
-                  icon: Icons.event_seat_rounded,
-                ),
-              ),
-              Expanded(
-                child: _detailItem(
-                  label: 'Amount',
-                  value: '₹$amount',
-                  icon: Icons.currency_rupee_rounded,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 10),
-
-          Row(
-            children: [
-              Expanded(
-                child: _detailItem(
-                  label: 'From',
-                  value: startDate,
-                  icon: Icons.calendar_today_rounded,
-                ),
-              ),
-              Expanded(
-                child: _detailItem(
-                  label: 'To',
-                  value: endDate,
-                  icon: Icons.calendar_month_rounded,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 10),
-
-          Row(
-            children: [
-              Expanded(
-                child: _detailItem(
-                  label: 'Method',
-                  value: paymentMethod,
-                  icon: Icons.payment_rounded,
-                ),
-              ),
-              Expanded(
-                child: _detailItem(
-                  label: 'Paid At',
-                  value: paidAt,
-                  icon: Icons.access_time_rounded,
-                ),
-              ),
-            ],
-          ),
-
-          if (transactionId != '-' && transactionId.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                const Icon(
-                  Icons.tag_rounded,
-                  size: 14,
-                  color: Color(0xFF4054C7),
-                ),
-                const SizedBox(width: 6),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Transaction ID',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.grey.shade500,
-                      ),
-                    ),
-                    Text(
-                      transactionId,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF172033),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _detailItem({
-    required String label,
-    required String value,
-    required IconData icon,
-  }) {
-    return Row(
-      children: [
-        Icon(icon, size: 14, color: const Color(0xFF4054C7)),
-        const SizedBox(width: 6),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
-            ),
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF172033),
-              ),
-            ),
-          ],
         ),
       ],
     );
   }
 
-  Widget _placeholderState() {
-    return Center(
+  // ===========================================================
+  // HEADER
+  // ===========================================================
+
+  Widget _buildHeader() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Welcome, ${widget.name.isNotEmpty ? widget.name : 'Owner'} 👋',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF0F172A),
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Here is your library performance summary',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: const Color(0xFFEEF2FF),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFDDE4FF)),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.shield_outlined, size: 13, color: Color(0xFF3B50DF)),
+              SizedBox(width: 4),
+              Text(
+                'Owner',
+                style: TextStyle(
+                  color: Color(0xFF3B50DF),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ===========================================================
+  // HERO REVENUE CARD
+  // ===========================================================
+
+  Widget _buildRevenueHeroCard() {
+    final double onlineCollection = (_totalMonthCollection - _cashCollection)
+        .clamp(0.0, double.infinity);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF2C3EC4), Color(0xFF4358E2)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF3B50DF).withOpacity(0.25),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.search_rounded, size: 60, color: Colors.grey.shade300),
-          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: const Icon(
+                      Icons.account_balance_wallet_rounded,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Monthly Collection',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 3.5,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Text(
+                  'This Month',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
           Text(
-            'Search a student',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey.shade400,
+            '₹${_totalMonthCollection.toStringAsFixed(0)}',
+            style: const TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+              letterSpacing: -0.5,
             ),
           ),
-          const SizedBox(height: 5),
-          Text(
-            'Enter a 10-digit mobile number above.',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.payments_outlined,
+                        color: Color(0xFFFBBF24),
+                        size: 16,
+                      ),
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Cash',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 10,
+                              ),
+                            ),
+                            Text(
+                              '₹${_cashCollection.toStringAsFixed(0)}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  height: 24,
+                  width: 1,
+                  margin: const EdgeInsets.symmetric(horizontal: 8),
+                  color: Colors.white.withOpacity(0.2),
+                ),
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.qr_code_rounded,
+                        color: Color(0xFF34D399),
+                        size: 16,
+                      ),
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Digital / UPI',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 10,
+                              ),
+                            ),
+                            Text(
+                              '₹${onlineCollection.toStringAsFixed(0)}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _emptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+  // ===========================================================
+  // BOOKED SEATS CARD (REPLACES ROOM OCCUPANCY)
+  // ===========================================================
+
+  Widget _buildBookedSeatsCard() {
+    final double bookedRatio = (_totalPaidStudents / totalSeatCapacity).clamp(
+      0.0,
+      1.0,
+    );
+    final int availableSeats = (totalSeatCapacity - _totalPaidStudents).clamp(
+      0,
+      totalSeatCapacity,
+    );
+
+    return InkWell(
+      onTap: _openPaidStudents,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.02),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(9),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFECFDF5),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.event_seat_rounded,
+                    color: Color(0xFF10B981),
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Booked Seats',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        '$_totalPaidStudents out of $totalSeatCapacity booked',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  '$_totalPaidStudents / $totalSeatCapacity',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF10B981),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(
+                value: bookedRatio,
+                minHeight: 7,
+                backgroundColor: const Color(0xFFF1F5F9),
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  Color(0xFF10B981),
+                ),
+              ),
+            ),
+            const SizedBox(height: 9),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '● $_totalPaidStudents Booked',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF10B981),
+                  ),
+                ),
+                Text(
+                  '● $availableSeats Available',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================
+  // METRICS GRID (INTRINSIC HEIGHT ALIGNED)
+  // ===========================================================
+
+  Widget _buildMetricsGrid() {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Icon(Icons.history_rounded, size: 60, color: Colors.grey.shade300),
-          const SizedBox(height: 12),
-          Text(
-            'No payment history found',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey.shade400,
+          // Pending Payments Card
+          Expanded(
+            child: _buildActionableCard(
+              title: 'Payment Requests',
+              subtitle: _pendingPaymentRequests > 0
+                  ? 'Action Required'
+                  : 'All cleared',
+              count: '$_pendingPaymentRequests',
+              icon: Icons.pending_actions_rounded,
+              accentColor: const Color(0xFFF59E0B),
+              bgColor: const Color(0xFFFFFBEB),
+              hasUrgency: _pendingPaymentRequests > 0,
+              onTap: _openPendingPaymentRequests,
             ),
           ),
-          const SizedBox(height: 5),
-          Text(
-            'This student has no payment records.',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+          const SizedBox(width: 12),
+
+          // Pending Seats Card
+          Expanded(
+            child: _buildActionableCard(
+              title: 'Pending Seats',
+              subtitle: _pendingSeats > 0 ? 'Seats on hold' : 'No hold seats',
+              count: '$_pendingSeats',
+              icon: Icons.hourglass_top_rounded,
+              accentColor: const Color(0xFFEF4444),
+              bgColor: const Color(0xFFFEF2F2),
+              hasUrgency: _pendingSeats > 0,
+              onTap: _openPendingSeats,
+            ),
           ),
         ],
       ),
     );
   }
 
-  String _formatDate(String? dateStr) {
-    if (dateStr == null || dateStr.isEmpty) return '-';
-    try {
-      final parts = dateStr.split('-');
-      if (parts.length < 3) return dateStr;
-      return '${parts[2]}/${parts[1]}/${parts[0]}';
-    } catch (_) {
-      return dateStr;
-    }
+  Widget _buildActionableCard({
+    required String title,
+    required String subtitle,
+    required String count,
+    required IconData icon,
+    required Color accentColor,
+    required Color bgColor,
+    required bool hasUrgency,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.all(15),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: hasUrgency
+                  ? accentColor.withOpacity(0.5)
+                  : const Color(0xFFE2E8F0),
+              width: hasUrgency ? 1.5 : 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: hasUrgency
+                    ? accentColor.withOpacity(0.08)
+                    : Colors.black.withOpacity(0.02),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: bgColor,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(icon, color: accentColor, size: 20),
+                  ),
+                  if (hasUrgency)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2.5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: accentColor,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Text(
+                        'REVIEW',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    count,
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      color: hasUrgency ? accentColor : const Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF334155),
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: Colors.grey.shade500,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
-  String _formatDateTime(String? dateTimeStr) {
-    if (dateTimeStr == null || dateTimeStr.isEmpty) return '-';
-    try {
-      final dt = DateTime.parse(dateTimeStr);
-      return '${dt.day.toString().padLeft(2, '0')}/'
-          '${dt.month.toString().padLeft(2, '0')}/'
-          '${dt.year} '
-          '${dt.hour.toString().padLeft(2, '0')}:'
-          '${dt.minute.toString().padLeft(2, '0')}';
-    } catch (_) {
-      return dateTimeStr;
-    }
+  // ===========================================================
+  // QUICK ACTIONS (INTRINSIC HEIGHT ALIGNED)
+  // ===========================================================
+
+  Widget _buildQuickActions() {
+    return Column(
+      children: [
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _quickActionButton(
+                  title: 'Paid Students',
+                  icon: Icons.people_outline_rounded,
+                  color: const Color(0xFF3B50DF),
+                  bgColor: const Color(0xFFEEF2FF),
+                  onTap: _openPaidStudents,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _quickActionButton(
+                  title: 'Payment History',
+                  icon: Icons.history_rounded,
+                  color: const Color(0xFF0EA5E9),
+                  bgColor: const Color(0xFFF0F9FF),
+                  onTap: _openPaymentHistory,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _quickActionButton(
+                  title: 'Approvals',
+                  icon: Icons.check_circle_outline_rounded,
+                  color: const Color(0xFFF59E0B),
+                  bgColor: const Color(0xFFFFFBEB),
+                  onTap: _openPendingPaymentRequests,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _quickActionButton(
+                  title: 'Pending Holds',
+                  icon: Icons.event_seat_outlined,
+                  color: const Color(0xFFEF4444),
+                  bgColor: const Color(0xFFFEF2F2),
+                  onTap: _openPendingSeats,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _quickActionButton({
+    required String title,
+    required IconData icon,
+    required Color color,
+    required Color bgColor,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: color, size: 17),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1E293B),
+                  ),
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: Colors.grey.shade400,
+                size: 17,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================
+  // LOADING STATE
+  // ===========================================================
+
+  Widget _buildLoadingCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 50),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: const Column(
+        children: [
+          CircularProgressIndicator(color: Color(0xFF3B50DF), strokeWidth: 3),
+          SizedBox(height: 14),
+          Text(
+            'Syncing dashboard data...',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF64748B),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================
+  // ERROR STATE
+  // ===========================================================
+
+  Widget _buildErrorCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFFECACA)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: const BoxDecoration(
+              color: Color(0xFFFEF2F2),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.cloud_off_rounded,
+              color: Color(0xFFEF4444),
+              size: 30,
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Unable to load dashboard',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            dashboardError ?? 'Please check your internet connection.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+          ),
+          const SizedBox(height: 14),
+          ElevatedButton.icon(
+            onPressed: loadDashboard,
+            icon: const Icon(Icons.refresh_rounded, size: 17),
+            label: const Text('Try Again'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF3B50DF),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

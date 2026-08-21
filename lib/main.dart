@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'firebase_options.dart';
 import 'screens/login_page.dart';
 import 'screens/dashboard_page.dart';
+import 'screens/library_selection_page.dart';
 import 'screens/owner_dashboard_page.dart';
 import 'services/session_service.dart';
+import 'theme/app_theme.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -94,12 +96,23 @@ class LibraryManagementApp extends StatelessWidget {
 
       title: 'Library Management',
 
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
-        useMaterial3: true,
-      ),
+      // ======================================================
+      // GLOBAL APPLICATION THEME
+      // ======================================================
+      //
+      // Use our custom theme from:
+      //
+      // theme/app_theme.dart
+      //
+      // This means all newly created pages can automatically
+      // use the same colors, buttons, text styles, cards,
+      // input fields, app bars, etc.
+      //
+      theme: AppTheme.lightTheme,
 
-      // Start from session checking page
+      // ======================================================
+      // START PAGE
+      // ======================================================
       home: const StartPage(),
     );
   }
@@ -170,10 +183,12 @@ class _StartPageState extends State<StartPage> {
       debugPrint('USER NAME   : $name');
       debugPrint('USER MOBILE : $mobile');
       debugPrint('USER ROLE   : $role');
+
       debugPrint(
         'JWT TOKEN   : '
         '${token != null && token.isNotEmpty ? 'AVAILABLE' : 'NOT AVAILABLE'}',
       );
+
       debugPrint('======================================');
 
       // ========================================================
@@ -239,16 +254,7 @@ class _StartPageState extends State<StartPage> {
 
         if (!mounted) return;
 
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => DashboardPage(
-              userId: userId,
-              name: name ?? 'User',
-              mobile: mobile ?? '',
-            ),
-          ),
-        );
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => LibrarySelectionPage()));
 
         return;
       }
@@ -293,3 +299,4 @@ class _StartPageState extends State<StartPage> {
     return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }
+

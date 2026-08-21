@@ -164,7 +164,7 @@ class _StudentListPageState extends State<StudentListPage> {
               itemBuilder: (context, index) {
                 final student = data[index];
 
-                final user = student["users"] ?? {};
+                final user = student["user"] ?? {};
 
                 final name = user["name"] ?? "Unknown";
 

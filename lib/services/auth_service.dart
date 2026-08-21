@@ -1,11 +1,120 @@
 import 'dart:convert';
+import 'dart:io';
+
 import 'package:http/http.dart' as http;
 
 class AuthService {
   static const String serverUrl =
-      "https://automatic-library-management.onrender.com";
+      "https://automatic-library-management-git-409107405882.asia-south1.run.app";
 
   static const String baseUrl = "$serverUrl/users";
+
+  // ==========================================================
+  // PRIVATE ERROR HANDLER
+  // ==========================================================
+
+  static String _getErrorMessage(
+    int statusCode,
+    String responseBody, {
+    required bool isLogin,
+  }) {
+    // ----------------------------------------------------------
+    // LOGIN AUTHENTICATION ERRORS
+    // ----------------------------------------------------------
+
+    if (isLogin) {
+      // Do not reveal whether mobile or password is incorrect.
+      if (statusCode == 401 || statusCode == 403 || statusCode == 404) {
+        return "Invalid mobile number or password";
+      }
+    }
+
+    // ----------------------------------------------------------
+    // REGISTRATION ERRORS
+    // ----------------------------------------------------------
+
+    if (!isLogin) {
+      if (statusCode == 409) {
+        return "Mobile number is already registered";
+      }
+
+      if (statusCode == 400) {
+        final message = _extractBackendMessage(responseBody);
+
+        if (message != null) {
+          return message;
+        }
+
+        return "Please check your registration details";
+      }
+    }
+
+    // ----------------------------------------------------------
+    // SERVER ERRORS
+    // ----------------------------------------------------------
+
+    if (statusCode >= 500) {
+      return "Server error. Please try again later.";
+    }
+
+    // ----------------------------------------------------------
+    // TRY TO READ BACKEND MESSAGE
+    // ----------------------------------------------------------
+
+    final backendMessage = _extractBackendMessage(responseBody);
+
+    if (backendMessage != null) {
+      return backendMessage;
+    }
+
+    // ----------------------------------------------------------
+    // DEFAULT MESSAGE
+    // ----------------------------------------------------------
+
+    if (isLogin) {
+      return "Unable to login. Please try again.";
+    }
+
+    return "Unable to register. Please try again.";
+  }
+
+  // ==========================================================
+  // EXTRACT MESSAGE FROM JSON RESPONSE
+  // ==========================================================
+
+  static String? _extractBackendMessage(String responseBody) {
+    if (responseBody.trim().isEmpty) {
+      return null;
+    }
+
+    try {
+      final decoded = jsonDecode(responseBody);
+
+      if (decoded is Map<String, dynamic>) {
+        final possibleMessage =
+            decoded['message'] ??
+            decoded['error'] ??
+            decoded['detail'] ??
+            decoded['msg'];
+
+        if (possibleMessage != null) {
+          final message = possibleMessage.toString().trim();
+
+          if (message.isNotEmpty) {
+            return message;
+          }
+        }
+      }
+
+      if (decoded is String && decoded.trim().isNotEmpty) {
+        return decoded.trim();
+      }
+    } catch (_) {
+      // Response is not JSON.
+    }
+
+    return null;
+  }
 
   // ==========================================================
   // REGISTER
@@ -16,23 +125,53 @@ class AuthService {
     required String mobile,
     required String password,
   }) async {
-    final response = await http.post(
-      Uri.parse("$baseUrl/register"),
-      headers: {"Content-Type": "application/json"},
-      body: jsonEncode({"name": name, "mobile": mobile, "password": password}),
-    );
+    try {
+      final response = await http
+          .post(
+            Uri.parse("$baseUrl/register"),
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+            },
+            body: jsonEncode({
+              "name": name,
+              "mobile": mobile,
+              "password": password,
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
 
-    print("REGISTER STATUS: ${response.statusCode}");
-    print("REGISTER RESPONSE: ${response.body}");
+      print("REGISTER STATUS: ${response.statusCode}");
+      print("REGISTER RESPONSE: ${response.body}");
 
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      return jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final decoded = jsonDecode(response.body);
+
+        if (decoded is Map<String, dynamic>) {
+          return decoded;
+        }
+
+        throw Exception("Invalid registration response from server");
+      }
+
+      throw Exception(
+        _getErrorMessage(response.statusCode, response.body, isLogin: false),
+      );
+    } on SocketException {
+      throw Exception(
+        "Unable to connect to server. Please check your internet connection.",
+      );
+    } on HttpException {
+      throw Exception(
+        "Unable to communicate with the server. Please try again.",
+      );
+    } on FormatException {
+      throw Exception("Invalid response received from server.");
+    } on Exception {
+      rethrow;
+    } catch (_) {
+      throw Exception("Something went wrong. Please try again.");
     }
-
-    throw Exception(
-      "Registration failed: "
-      "${response.statusCode} ${response.body}",
-    );
   }
 
   // ==========================================================
@@ -43,44 +182,77 @@ class AuthService {
     required String mobile,
     required String password,
   }) async {
-    final response = await http.post(
-      Uri.parse("$baseUrl/login"),
-      headers: {"Content-Type": "application/json"},
-      body: jsonEncode({"mobile": mobile, "password": password}),
-    );
+    try {
+      final response = await http
+          .post(
+            Uri.parse("$baseUrl/login"),
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+            },
+            body: jsonEncode({"mobile": mobile, "password": password}),
+          )
+          .timeout(const Duration(seconds: 30));
 
-    print("LOGIN STATUS: ${response.statusCode}");
-    print("LOGIN RESPONSE BODY: ${response.body}");
+      print("LOGIN STATUS: ${response.statusCode}");
+      print("LOGIN RESPONSE BODY: ${response.body}");
 
-    if (response.statusCode == 200) {
-      final Map<String, dynamic> data =
-          jsonDecode(response.body) as Map<String, dynamic>;
+      // ========================================================
+      // SUCCESS
+      // ========================================================
 
-      print("LOGIN DATA: $data");
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
 
-      // ======================================================
-      // CHECK ROLE
-      // ======================================================
+        if (decoded is! Map<String, dynamic>) {
+          throw Exception("Invalid login response received from server.");
+        }
 
-      if (data['role'] == null) {
-        throw Exception("Login response does not contain user role");
+        final Map<String, dynamic> data = decoded;
+
+        print("LOGIN DATA: $data");
+
+        // ======================================================
+        // CHECK ROLE
+        // ======================================================
+
+        if (data['role'] == null || data['role'].toString().trim().isEmpty) {
+          throw Exception("Login response does not contain user role.");
+        }
+
+        // ======================================================
+        // CHECK JWT
+        // ======================================================
+
+        if (data['token'] == null || data['token'].toString().trim().isEmpty) {
+          throw Exception("Login response does not contain JWT token.");
+        }
+
+        return data;
       }
 
-      // ======================================================
-      // CHECK JWT
-      // ======================================================
+      // ========================================================
+      // LOGIN FAILURE
+      // ========================================================
 
-      if (data['token'] == null || data['token'].toString().isEmpty) {
-        throw Exception("Login response does not contain JWT token");
-      }
-
-      return data;
+      throw Exception(
+        _getErrorMessage(response.statusCode, response.body, isLogin: true),
+      );
+    } on SocketException {
+      throw Exception(
+        "Unable to connect to server. Please check your internet connection.",
+      );
+    } on HttpException {
+      throw Exception(
+        "Unable to communicate with the server. Please try again.",
+      );
+    } on FormatException {
+      throw Exception("Invalid response received from server.");
+    } on Exception {
+      rethrow;
+    } catch (_) {
+      throw Exception("Something went wrong. Please try again.");
     }
-
-    throw Exception(
-      "Login failed: "
-      "${response.statusCode} ${response.body}",
-    );
   }
 
   // ==========================================================
@@ -102,18 +274,26 @@ class AuthService {
 
     print("FCM TOKEN URL: $uri");
 
-    final response = await http.put(uri);
+    try {
+      final response = await http.put(uri).timeout(const Duration(seconds: 30));
 
-    print("FCM TOKEN SAVE STATUS: ${response.statusCode}");
-    print("FCM TOKEN SAVE RESPONSE: ${response.body}");
+      print("FCM TOKEN SAVE STATUS: ${response.statusCode}");
+      print("FCM TOKEN SAVE RESPONSE: ${response.body}");
 
-    if (response.statusCode != 200) {
-      throw Exception(
-        "Failed to save FCM token: "
-        "${response.statusCode} ${response.body}",
-      );
+      if (response.statusCode != 200) {
+        throw Exception(
+          "Failed to save FCM token: "
+          "${response.statusCode} ${response.body}",
+        );
+      }
+
+      print("FCM TOKEN SAVED SUCCESSFULLY");
+    } on SocketException {
+      throw Exception("Unable to connect while saving FCM token.");
+    } on Exception {
+      rethrow;
+    } catch (_) {
+      throw Exception("Unable to save FCM token.");
     }
-
-    print("FCM TOKEN SAVED SUCCESSFULLY");
   }
 }

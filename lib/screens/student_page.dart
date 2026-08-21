@@ -3,9 +3,9 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../services/booking_service.dart';
 import '../services/student_service.dart';
 import 'seat_booking_page.dart';
-import 'dashboard_page.dart';
 import '../widgets/app_drawer.dart';
 
 class StudentPage extends StatefulWidget {
@@ -25,28 +25,21 @@ class StudentPage extends StatefulWidget {
 }
 
 class _StudentPageState extends State<StudentPage> {
+  final BookingService _bookingService = BookingService();
+
   // ============================================================
-  // PROFILE
+  // PROFILE & BOOKING STATE
   // ============================================================
 
   Map<String, dynamic>? studentProfile;
   bool profileLoading = true;
 
-  // ============================================================
-  // BOOKING
-  // ============================================================
-
   Map<String, dynamic>? activeBooking;
   bool bookingLoading = true;
-
-  // ============================================================
-  // INIT
-  // ============================================================
 
   @override
   void initState() {
     super.initState();
-
     loadUserProfile();
     loadActiveBooking();
   }
@@ -57,77 +50,41 @@ class _StudentPageState extends State<StudentPage> {
 
   Future<void> loadUserProfile() async {
     if (!mounted) return;
-
-    setState(() {
-      profileLoading = true;
-    });
+    setState(() => profileLoading = true);
 
     try {
-      debugPrint("========================================");
-      debugPrint("LOADING USER PROFILE");
-      debugPrint("MOBILE: ${widget.mobile}");
-
-      final student = await StudentService.getStudentByMobile(widget.mobile);
-
-      debugPrint("PROFILE RESPONSE: $student");
-      debugPrint("========================================");
-
+      final student = await StudentService.getStudentByUserId(widget.userId);
       if (!mounted) return;
-
       setState(() {
         studentProfile = Map<String, dynamic>.from(student);
         profileLoading = false;
       });
     } catch (e) {
-      debugPrint("PROFILE ERROR: $e");
-
       if (!mounted) return;
-
-      setState(() {
-        studentProfile = null;
-        profileLoading = false;
-      });
+      setState(() => profileLoading = false);
     }
   }
 
   // ============================================================
-  // LOAD ACTIVE BOOKING
+  // LOAD ACTIVE / PENDING BOOKING
   // ============================================================
 
   Future<void> loadActiveBooking() async {
     if (!mounted) return;
-
-    setState(() {
-      bookingLoading = true;
-    });
+    setState(() => bookingLoading = true);
 
     try {
-      debugPrint("========================================");
-      debugPrint("LOADING ACTIVE BOOKING");
-      debugPrint("USER ID: ${widget.userId}");
-
       final Map<String, dynamic>? booking = await StudentService.getMyBooking(
         widget.userId,
       );
 
-      debugPrint("BOOKING RESPONSE:");
-      debugPrint("$booking");
-      debugPrint("========================================");
-
       if (!mounted) return;
-
       setState(() {
         activeBooking = booking;
         bookingLoading = false;
       });
     } catch (e) {
-      debugPrint("========================================");
-      debugPrint("BOOKING LOAD ERROR:");
-      debugPrint("$e");
-      debugPrint("========================================");
-
       if (!mounted) return;
-
       setState(() {
         activeBooking = null;
         bookingLoading = false;
@@ -135,36 +92,173 @@ class _StudentPageState extends State<StudentPage> {
     }
   }
 
-  // ============================================================
-  // REFRESH
-  // ============================================================
-
   Future<void> refreshPage() async {
     await Future.wait([loadUserProfile(), loadActiveBooking()]);
   }
 
   // ============================================================
-  // PROFILE VALUE
+  // CANCEL PENDING SEAT HOLD (STUDENT ACTION)
   // ============================================================
 
+  Future<void> _cancelSeatHold(String bookingIdStr, String seatNumber) async {
+    final int? bookingId = int.tryParse(bookingIdStr);
+    if (bookingId == null) {
+      _showMessage('Invalid booking ID', isError: true);
+      return;
+    }
+
+    // 1. Show Confirmation Dialog
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.cancel_outlined,
+                  color: Color(0xFFEF4444),
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Cancel Seat Hold?',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: Text(
+            'Are you sure you want to cancel your hold on Seat $seatNumber?\n\nThe seat will be released immediately and made available for other students.',
+            style: const TextStyle(fontSize: 13, color: Color(0xFF475569)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text(
+                'Keep Hold',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFEF4444),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text(
+                'Cancel Hold',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    // 2. Loading dialog
+    _showLoadingDialog('Cancelling your seat hold...');
+
+    try {
+      await _bookingService.cancelPendingBooking(
+        bookingId: bookingId,
+        userId: widget.userId,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Close loading dialog
+
+      _showMessage('Seat $seatNumber hold cancelled successfully.');
+      await loadActiveBooking(); // Refresh to show no-booking card
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Close loading dialog
+      _showMessage(_cleanError(e), isError: true);
+    }
+  }
+
+  void _showLoadingDialog(String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          content: Row(
+            children: [
+              const SizedBox(
+                height: 24,
+                width: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: Colors.indigo,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  message,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showMessage(String message, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: isError
+              ? const Color(0xFFEF4444)
+              : const Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+  }
+
+  String _cleanError(Object error) {
+    final message = error.toString();
+    if (message.startsWith('Exception: ')) {
+      return message.substring(11);
+    }
+    return message;
+  }
+
   String _profileValue(String key, String defaultValue) {
-    if (studentProfile == null) {
-      return defaultValue;
-    }
-
+    if (studentProfile == null) return defaultValue;
     final value = studentProfile![key];
-
-    if (value == null) {
-      return defaultValue;
-    }
-
+    if (value == null) return defaultValue;
     final text = value.toString().trim();
-
-    if (text.isEmpty) {
-      return defaultValue;
-    }
-
-    return text;
+    return text.isEmpty ? defaultValue : text;
   }
 
   // ============================================================
@@ -186,10 +280,14 @@ class _StudentPageState extends State<StudentPage> {
       );
     }
 
-    final name = _profileValue("name", widget.name);
-    final mobile = _profileValue("mobile", widget.mobile);
-    final city = _profileValue("city", "City not available");
-    final address = _profileValue("address", "Address not available");
+    final name = studentProfile != null
+        ? _profileValue("name", widget.name)
+        : widget.name;
+    final mobile = studentProfile != null
+        ? _profileValue("mobile", widget.mobile)
+        : widget.mobile;
+    final city = _profileValue("city", "");
+    final address = _profileValue("address", "");
 
     return Container(
       width: double.infinity,
@@ -208,9 +306,6 @@ class _StudentPageState extends State<StudentPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ======================================================
-          // HEADER
-          // ======================================================
           Row(
             children: [
               Container(
@@ -221,9 +316,7 @@ class _StudentPageState extends State<StudentPage> {
                 ),
                 child: const Icon(Icons.person, color: Colors.indigo, size: 26),
               ),
-
               const SizedBox(width: 12),
-
               const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -240,12 +333,7 @@ class _StudentPageState extends State<StudentPage> {
               ),
             ],
           ),
-
           const SizedBox(height: 18),
-
-          // ======================================================
-          // USER
-          // ======================================================
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(14),
@@ -267,9 +355,7 @@ class _StudentPageState extends State<StudentPage> {
                     ),
                   ),
                 ),
-
                 const SizedBox(width: 14),
-
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -278,9 +364,7 @@ class _StudentPageState extends State<StudentPage> {
                         "Name",
                         style: TextStyle(color: Colors.grey, fontSize: 11),
                       ),
-
                       const SizedBox(height: 3),
-
                       Text(
                         name,
                         style: const TextStyle(
@@ -295,26 +379,20 @@ class _StudentPageState extends State<StudentPage> {
               ],
             ),
           ),
-
           const SizedBox(height: 12),
-
           _profileRow(icon: Icons.phone, title: "Mobile Number", value: mobile),
-
-          const SizedBox(height: 10),
-
-          _profileRow(icon: Icons.location_city, title: "City", value: city),
-
-          const SizedBox(height: 10),
-
-          _profileRow(icon: Icons.home, title: "Address", value: address),
+          if (studentProfile != null && city.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _profileRow(icon: Icons.location_city, title: "City", value: city),
+          ],
+          if (studentProfile != null && address.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _profileRow(icon: Icons.home, title: "Address", value: address),
+          ],
         ],
       ),
     );
   }
-
-  // ============================================================
-  // PROFILE ROW
-  // ============================================================
 
   Widget _profileRow({
     required IconData icon,
@@ -340,9 +418,7 @@ class _StudentPageState extends State<StudentPage> {
             ),
             child: Icon(icon, color: Colors.indigo, size: 20),
           ),
-
           const SizedBox(width: 12),
-
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -351,9 +427,7 @@ class _StudentPageState extends State<StudentPage> {
                   title,
                   style: const TextStyle(color: Colors.grey, fontSize: 11),
                 ),
-
                 const SizedBox(height: 3),
-
                 Text(
                   value,
                   style: const TextStyle(
@@ -370,7 +444,7 @@ class _StudentPageState extends State<StudentPage> {
   }
 
   // ============================================================
-  // ACTIVE BOOKING CARD
+  // ACTIVE BOOKING CARD (WITH PAY NOW & CANCEL HOLD BUTTONS)
   // ============================================================
 
   Widget _activeBookingCard() {
@@ -393,31 +467,55 @@ class _StudentPageState extends State<StudentPage> {
     }
 
     final booking = activeBooking!;
-
     final seatNumber = booking["seatNumber"]?.toString() ?? "-";
-
     final seatId = booking["seatId"]?.toString() ?? "-";
-
     final bookingId =
         booking["bookingId"]?.toString() ?? booking["id"]?.toString() ?? "-";
-
     final bookingStatus = booking["bookingStatus"]?.toString() ?? "-";
-
     final startDate = booking["startDate"]?.toString() ?? "-";
-
     final endDate = booking["endDate"]?.toString() ?? "-";
-
     final paymentId = booking["paymentId"]?.toString() ?? "-";
-
     final amount = booking["amount"]?.toString() ?? "0";
-
     final paymentStatus = booking["paymentStatus"]?.toString() ?? "-";
-
     final paymentMethod = booking["paymentMethod"]?.toString() ?? "-";
-
+    final approvalStatus = booking["approvalStatus"]?.toString() ?? "";
+    final paymentType = booking["paymentType"]?.toString() ?? "";
     final transactionId = booking["transactionId"]?.toString() ?? "-";
-
     final paidAt = booking["paidAt"]?.toString() ?? "-";
+
+    final deadlineInfo = _getPaymentDeadline(booking);
+    final deadlineDate = deadlineInfo["deadline"] as DateTime?;
+    final daysRemaining = deadlineInfo["daysRemaining"] as int;
+    final deadlineExpired = deadlineInfo["expired"] as bool;
+
+    final displayStatus = _getDisplayStatus(
+      bookingStatus: bookingStatus,
+      paymentStatus: paymentStatus,
+      approvalStatus: approvalStatus,
+      paymentType: paymentType,
+      deadlineExpired: deadlineExpired,
+    );
+
+    final statusColor = _getStatusColor(
+      bookingStatus: bookingStatus,
+      paymentStatus: paymentStatus,
+      approvalStatus: approvalStatus,
+      paymentType: paymentType,
+      deadlineExpired: deadlineExpired,
+    );
+
+    final paymentPending = paymentStatus.toUpperCase() == "PENDING";
+    final isPendingHold =
+        bookingStatus.toUpperCase() == "PENDING" || paymentPending;
+    final concessionalApprovalPending =
+        paymentType.toUpperCase() == "CONCESSIONAL" &&
+        paymentPending &&
+        approvalStatus.toUpperCase() == "PENDING";
+
+    final canPayNow =
+        paymentPending && !concessionalApprovalPending && !deadlineExpired;
+    final temporaryBlocked =
+        paymentPending && !concessionalApprovalPending && !deadlineExpired;
 
     return Container(
       width: double.infinity,
@@ -438,9 +536,7 @@ class _StudentPageState extends State<StudentPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ======================================================
-          // HEADER
-          // ======================================================
+          // Header
           Row(
             children: [
               Container(
@@ -455,9 +551,7 @@ class _StudentPageState extends State<StudentPage> {
                   size: 28,
                 ),
               ),
-
               const SizedBox(width: 12),
-
               const Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -478,21 +572,21 @@ class _StudentPageState extends State<StudentPage> {
                   ],
                 ),
               ),
-
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.green,
+                  color: statusColor,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  bookingStatus,
+                  displayStatus,
+                  textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 10,
+                    fontSize: 9,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -502,9 +596,25 @@ class _StudentPageState extends State<StudentPage> {
 
           const SizedBox(height: 18),
 
-          // ======================================================
-          // SEAT NUMBER
-          // ======================================================
+          if (temporaryBlocked) ...[
+            _temporaryBlockedCard(
+              deadlineDate: deadlineDate,
+              daysRemaining: daysRemaining,
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          if (concessionalApprovalPending) ...[
+            _approvalPendingCard(),
+            const SizedBox(height: 12),
+          ],
+
+          if (deadlineExpired && paymentPending) ...[
+            _deadlineExpiredCard(),
+            const SizedBox(height: 12),
+          ],
+
+          // Seat Number Box
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
@@ -526,16 +636,13 @@ class _StudentPageState extends State<StudentPage> {
                     size: 30,
                   ),
                 ),
-
                 const SizedBox(width: 12),
-
                 const Expanded(
                   child: Text(
                     "Seat Number",
                     style: TextStyle(color: Colors.grey, fontSize: 13),
                   ),
                 ),
-
                 Text(
                   seatNumber,
                   style: const TextStyle(
@@ -549,14 +656,10 @@ class _StudentPageState extends State<StudentPage> {
           ),
 
           const SizedBox(height: 10),
-
           _whiteDetailRow("Seat ID", seatId),
-
           const SizedBox(height: 12),
 
-          // ======================================================
-          // VALIDITY
-          // ======================================================
+          // Validity
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -572,9 +675,7 @@ class _StudentPageState extends State<StudentPage> {
                     Icons.calendar_today,
                   ),
                 ),
-
                 Container(width: 1, height: 45, color: Colors.white24),
-
                 Expanded(
                   child: _bookingInfo(
                     "Valid Until",
@@ -588,9 +689,7 @@ class _StudentPageState extends State<StudentPage> {
 
           const SizedBox(height: 12),
 
-          // ======================================================
-          // PAYMENT SECTION
-          // ======================================================
+          // Payment Information
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(14),
@@ -604,9 +703,7 @@ class _StudentPageState extends State<StudentPage> {
                 const Row(
                   children: [
                     Icon(Icons.payment, color: Colors.white, size: 20),
-
                     SizedBox(width: 8),
-
                     Text(
                       "Payment Information",
                       style: TextStyle(
@@ -617,39 +714,37 @@ class _StudentPageState extends State<StudentPage> {
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 14),
-
                 _bookingDetailRow("Payment Status", paymentStatus),
-
                 const SizedBox(height: 9),
-
                 _bookingDetailRow("Payment ID", paymentId),
-
                 const SizedBox(height: 9),
-
-                _bookingDetailRow("Amount Paid", "₹$amount"),
-
+                _bookingDetailRow("Amount", "₹$amount"),
                 const SizedBox(height: 9),
-
                 _bookingDetailRow("Payment Method", paymentMethod),
-
-                const SizedBox(height: 9),
-
-                _bookingDetailRow("Transaction ID", transactionId),
-
-                const SizedBox(height: 9),
-
-                _bookingDetailRow("Paid At", paidAt),
+                if (paymentType.isNotEmpty) ...[
+                  const SizedBox(height: 9),
+                  _bookingDetailRow("Payment Type", paymentType),
+                ],
+                if (approvalStatus.isNotEmpty) ...[
+                  const SizedBox(height: 9),
+                  _bookingDetailRow("Approval Status", approvalStatus),
+                ],
+                if (transactionId != "-" && transactionId.isNotEmpty) ...[
+                  const SizedBox(height: 9),
+                  _bookingDetailRow("Transaction ID", transactionId),
+                ],
+                if (paidAt != "-" && paidAt.isNotEmpty) ...[
+                  const SizedBox(height: 9),
+                  _bookingDetailRow("Paid At", paidAt),
+                ],
               ],
             ),
           ),
 
           const SizedBox(height: 12),
 
-          // ======================================================
-          // BOOKING INFORMATION
-          // ======================================================
+          // Booking Information
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(14),
@@ -667,9 +762,7 @@ class _StudentPageState extends State<StudentPage> {
                       color: Colors.white,
                       size: 20,
                     ),
-
                     SizedBox(width: 8),
-
                     Text(
                       "Booking Information",
                       style: TextStyle(
@@ -680,48 +773,225 @@ class _StudentPageState extends State<StudentPage> {
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 14),
-
                 _bookingDetailRow("Booking ID", bookingId),
-
                 const SizedBox(height: 9),
-
                 _bookingDetailRow("Booking Status", bookingStatus),
-
                 const SizedBox(height: 9),
-
                 _bookingDetailRow("Start Date", startDate),
-
                 const SizedBox(height: 9),
-
                 _bookingDetailRow("End Date", endDate),
+                if (paymentPending && deadlineDate != null) ...[
+                  const SizedBox(height: 9),
+                  _bookingDetailRow(
+                    "Payment Deadline",
+                    _formatDisplayDate(deadlineDate),
+                  ),
+                ],
               ],
             ),
           ),
 
-          const SizedBox(height: 15),
+          const SizedBox(height: 16),
 
           // ======================================================
-          // PAYMENT RECEIPT BUTTON
+          // ACTION BUTTONS: PAY NOW + CANCEL HOLD
           // ======================================================
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _showPaymentSlip,
-              icon: const Icon(Icons.receipt_long),
-              label: const Text(
-                "VIEW PAYMENT RECEIPT",
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.indigo,
-                padding: const EdgeInsets.symmetric(vertical: 13),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+          if (isPendingHold) ...[
+            if (canPayNow)
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _openPayment,
+                  icon: const Icon(Icons.payment, size: 20),
+                  label: const Text(
+                    "PAY NOW",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.indigo,
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
                 ),
               ),
+
+            const SizedBox(height: 10),
+
+            // Cancel Seat Hold Button
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _cancelSeatHold(bookingId, seatNumber),
+                icon: const Icon(Icons.cancel_outlined, size: 18),
+                label: const Text(
+                  "CANCEL SEAT HOLD",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: Colors.white60, width: 1.2),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          ],
+
+          // ======================================================
+          // RECEIPT (ONLY WHEN PAID)
+          // ======================================================
+          if (_isPaymentSuccessful(paymentStatus))
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _showPaymentSlip,
+                icon: const Icon(Icons.receipt_long),
+                label: const Text(
+                  "VIEW PAYMENT RECEIPT",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.indigo,
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // STATUS CARDS
+  // ============================================================
+
+  Widget _temporaryBlockedCard({
+    required DateTime? deadlineDate,
+    required int daysRemaining,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(0.16),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.orange.withOpacity(0.45)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.22),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.lock_clock,
+                  color: Colors.orange,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  "TEMPORARY SEAT BLOCKED",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            "This seat is temporarily reserved for you. Complete the payment to confirm your booking.",
+            style: TextStyle(color: Colors.white, fontSize: 12, height: 1.4),
+          ),
+          const SizedBox(height: 10),
+          if (deadlineDate != null)
+            Row(
+              children: [
+                const Icon(Icons.timer_outlined, color: Colors.white, size: 17),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    daysRemaining <= 0
+                        ? "Payment deadline is today"
+                        : "$daysRemaining day${daysRemaining == 1 ? '' : 's'} remaining",
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Text(
+                  _formatDisplayDate(deadlineDate),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _approvalPendingCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(0.16),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.orange.withOpacity(0.45)),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.hourglass_top, color: Colors.orange, size: 24),
+          SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "OWNER APPROVAL PENDING",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 5),
+                Text(
+                  "Your concessional payment request is waiting for owner approval. Payment will be available after approval.",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -729,9 +999,204 @@ class _StudentPageState extends State<StudentPage> {
     );
   }
 
-  // ============================================================
-  // WHITE DETAIL ROW
-  // ============================================================
+  Widget _deadlineExpiredCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.16),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.red.withOpacity(0.45)),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 24),
+          SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "PAYMENT DEADLINE EXPIRED",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 5),
+                Text(
+                  "The temporary 5-day payment period has expired. Please create a new booking.",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Map<String, dynamic> _getPaymentDeadline(Map<String, dynamic> booking) {
+    DateTime? reservationDate;
+    final possibleDates = [
+      booking["createdAt"],
+      booking["bookingDate"],
+      booking["reservationDate"],
+      booking["reservedAt"],
+      booking["createdOn"],
+      booking["startDate"],
+    ];
+
+    for (final value in possibleDates) {
+      if (value == null) continue;
+      final text = value.toString().trim();
+      if (text.isEmpty || text == "-") continue;
+      try {
+        reservationDate = DateTime.parse(text);
+        break;
+      } catch (_) {}
+    }
+
+    if (reservationDate == null) {
+      return {"deadline": null, "daysRemaining": 0, "expired": false};
+    }
+
+    final deadline = reservationDate.add(const Duration(days: 5));
+    final now = DateTime.now();
+    final difference = deadline.difference(now);
+    final expired = now.isAfter(deadline);
+    int daysRemaining = difference.inDays;
+    if (!expired && daysRemaining < 1) daysRemaining = 1;
+    if (expired) daysRemaining = 0;
+
+    return {
+      "deadline": deadline,
+      "daysRemaining": daysRemaining,
+      "expired": expired,
+    };
+  }
+
+  String _getDisplayStatus({
+    required String bookingStatus,
+    required String paymentStatus,
+    required String approvalStatus,
+    required String paymentType,
+    required bool deadlineExpired,
+  }) {
+    final booking = bookingStatus.toUpperCase();
+    final payment = paymentStatus.toUpperCase();
+    final approval = approvalStatus.toUpperCase();
+    final type = paymentType.toUpperCase();
+
+    if (type == "CONCESSIONAL" &&
+        payment == "PENDING" &&
+        approval == "PENDING") {
+      return "APPROVAL PENDING";
+    }
+    if (payment == "SUCCESS") {
+      return booking == "ACTIVE" ? "BOOKED" : "PAID";
+    }
+    if (payment == "PENDING" && deadlineExpired) {
+      return "EXPIRED";
+    }
+    if (payment == "PENDING") {
+      return "PAYMENT PENDING";
+    }
+    if (payment == "FAILED") {
+      return "PAYMENT FAILED";
+    }
+    if (booking == "CANCELLED") {
+      return "CANCELLED";
+    }
+    return booking.isNotEmpty ? booking : "PENDING";
+  }
+
+  Color _getStatusColor({
+    required String bookingStatus,
+    required String paymentStatus,
+    required String approvalStatus,
+    required String paymentType,
+    required bool deadlineExpired,
+  }) {
+    final booking = bookingStatus.toUpperCase();
+    final payment = paymentStatus.toUpperCase();
+    final approval = approvalStatus.toUpperCase();
+    final type = paymentType.toUpperCase();
+
+    if (type == "CONCESSIONAL" &&
+        payment == "PENDING" &&
+        approval == "PENDING") {
+      return Colors.orange;
+    }
+    if (payment == "SUCCESS") {
+      return Colors.green;
+    }
+    if (payment == "PENDING" && deadlineExpired) {
+      return Colors.red;
+    }
+    if (payment == "PENDING") {
+      return Colors.orange;
+    }
+    if (payment == "FAILED" || booking == "CANCELLED") {
+      return Colors.red;
+    }
+    return Colors.orange;
+  }
+
+  bool _isPaymentSuccessful(String paymentStatus) {
+    return paymentStatus.toUpperCase() == "SUCCESS";
+  }
+
+  Future<void> _openPayment() async {
+    if (activeBooking == null) return;
+    final booking = activeBooking!;
+    final paymentStatus = booking["paymentStatus"]?.toString() ?? "";
+    final approvalStatus = booking["approvalStatus"]?.toString() ?? "";
+    final paymentType = booking["paymentType"]?.toString() ?? "";
+
+    if (paymentStatus.toUpperCase() != "PENDING") return;
+
+    if (paymentType.toUpperCase() == "CONCESSIONAL" &&
+        approvalStatus.toUpperCase() == "PENDING") {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Payment is waiting for owner approval."),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final deadlineInfo = _getPaymentDeadline(booking);
+    if (deadlineInfo["expired"] as bool) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("The 5-day payment period has expired."),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SeatBookingPage(
+          userId: widget.userId,
+          name: widget.name,
+          mobile: widget.mobile,
+        ),
+      ),
+    );
+
+    await loadActiveBooking();
+  }
 
   Widget _whiteDetailRow(String title, String value) {
     return Container(
@@ -747,9 +1212,7 @@ class _StudentPageState extends State<StudentPage> {
             title,
             style: const TextStyle(color: Colors.white70, fontSize: 12),
           ),
-
           const Spacer(),
-
           Flexible(
             child: Text(
               value,
@@ -765,10 +1228,6 @@ class _StudentPageState extends State<StudentPage> {
       ),
     );
   }
-
-  // ============================================================
-  // NO BOOKING CARD
-  // ============================================================
 
   Widget _noBookingCard() {
     return Container(
@@ -796,24 +1255,18 @@ class _StudentPageState extends State<StudentPage> {
               color: Colors.grey,
             ),
           ),
-
           const SizedBox(height: 10),
-
           const Text(
             "No Active Seat Booking",
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
           ),
-
           const SizedBox(height: 5),
-
           const Text(
-            "You don't have an active seat reservation.",
+            "You don't have an active or pending seat reservation.",
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.grey, fontSize: 13),
           ),
-
           const SizedBox(height: 14),
-
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -835,26 +1288,18 @@ class _StudentPageState extends State<StudentPage> {
     );
   }
 
-  // ============================================================
-  // BOOKING INFO
-  // ============================================================
-
   Widget _bookingInfo(String title, String value, IconData icon) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Column(
         children: [
           Icon(icon, color: Colors.white, size: 18),
-
           const SizedBox(height: 5),
-
           Text(
             title,
             style: const TextStyle(color: Colors.white70, fontSize: 11),
           ),
-
           const SizedBox(height: 3),
-
           Text(
             value,
             textAlign: TextAlign.center,
@@ -869,10 +1314,6 @@ class _StudentPageState extends State<StudentPage> {
     );
   }
 
-  // ============================================================
-  // BOOKING DETAIL ROW
-  // ============================================================
-
   Widget _bookingDetailRow(String title, String value) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -883,9 +1324,7 @@ class _StudentPageState extends State<StudentPage> {
             style: const TextStyle(color: Colors.white70, fontSize: 12),
           ),
         ),
-
         const SizedBox(width: 10),
-
         Flexible(
           child: Text(
             value,
@@ -901,10 +1340,6 @@ class _StudentPageState extends State<StudentPage> {
     );
   }
 
-  // ============================================================
-  // OPEN SEAT BOOKING
-  // ============================================================
-
   Future<void> _openSeatBooking() async {
     await Navigator.push(
       context,
@@ -916,40 +1351,34 @@ class _StudentPageState extends State<StudentPage> {
         ),
       ),
     );
-
     await loadActiveBooking();
   }
 
+  String _formatDisplayDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/'
+        '${date.month.toString().padLeft(2, '0')}/'
+        '${date.year}';
+  }
+
   // ============================================================
-  // PAYMENT RECEIPT DIALOG
+  // PAYMENT RECEIPT
   // ============================================================
 
   void _showPaymentSlip() {
     if (activeBooking == null) return;
-
     final booking = activeBooking!;
-
     final bookingId =
         booking["bookingId"]?.toString() ?? booking["id"]?.toString() ?? "-";
-
     final seatNumber = booking["seatNumber"]?.toString() ?? "-";
-
     final seatId = booking["seatId"]?.toString() ?? "-";
-
     final paymentId = booking["paymentId"]?.toString() ?? "-";
-
     final amount = booking["amount"]?.toString() ?? "0";
-
     final paymentStatus = booking["paymentStatus"]?.toString() ?? "-";
-
     final paymentMethod = booking["paymentMethod"]?.toString() ?? "-";
-
+    final paymentType = booking["paymentType"]?.toString() ?? "-";
     final transactionId = booking["transactionId"]?.toString() ?? "-";
-
     final paidAt = booking["paidAt"]?.toString() ?? "-";
-
     final startDate = booking["startDate"]?.toString() ?? "-";
-
     final endDate = booking["endDate"]?.toString() ?? "-";
 
     showDialog(
@@ -959,13 +1388,10 @@ class _StudentPageState extends State<StudentPage> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18),
           ),
-
           title: const Row(
             children: [
               Icon(Icons.receipt_long, color: Colors.indigo),
-
               SizedBox(width: 8),
-
               Expanded(
                 child: Text(
                   "Payment Receipt",
@@ -974,14 +1400,10 @@ class _StudentPageState extends State<StudentPage> {
               ),
             ],
           ),
-
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // ==================================================
-                // SUCCESS ICON
-                // ==================================================
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -994,9 +1416,7 @@ class _StudentPageState extends State<StudentPage> {
                     size: 45,
                   ),
                 ),
-
                 const SizedBox(height: 8),
-
                 Text(
                   paymentStatus.toUpperCase() == "SUCCESS"
                       ? "Payment Successful"
@@ -1009,56 +1429,32 @@ class _StudentPageState extends State<StudentPage> {
                         : Colors.orange,
                   ),
                 ),
-
                 const SizedBox(height: 20),
-
                 _receiptRow("Student", widget.name),
-
                 _receiptRow("Mobile", widget.mobile),
-
                 _receiptRow("Seat Number", seatNumber),
-
                 _receiptRow("Seat ID", seatId),
-
                 _receiptRow("Booking ID", bookingId),
-
                 _receiptRow("Payment ID", paymentId),
-
                 _receiptRow("Payment Status", paymentStatus),
-
                 _receiptRow("Payment Method", paymentMethod),
-
+                _receiptRow("Payment Type", paymentType),
                 _receiptRow("Amount", "₹$amount"),
-
                 _receiptRow("Transaction ID", transactionId),
-
                 _receiptRow("Paid At", paidAt),
-
                 _receiptRow("Valid From", startDate),
-
                 _receiptRow("Valid Until", endDate),
               ],
             ),
           ),
-
           actions: [
-            // ==================================================
-            // CLOSE
-            // ==================================================
             TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-              },
+              onPressed: () => Navigator.pop(dialogContext),
               child: const Text("CLOSE"),
             ),
-
-            // ==================================================
-            // DOWNLOAD
-            // ==================================================
             ElevatedButton.icon(
               onPressed: () async {
                 Navigator.pop(dialogContext);
-
                 await _downloadPaymentReceipt();
               },
               icon: const Icon(Icons.download),
@@ -1074,55 +1470,33 @@ class _StudentPageState extends State<StudentPage> {
     );
   }
 
-  // ============================================================
-  // DOWNLOAD / SHARE PAYMENT RECEIPT PDF
-  // ============================================================
-
   Future<void> _downloadPaymentReceipt() async {
     if (activeBooking == null) return;
-
     try {
       final booking = activeBooking!;
-
       final bookingId =
           booking["bookingId"]?.toString() ?? booking["id"]?.toString() ?? "-";
-
       final seatNumber = booking["seatNumber"]?.toString() ?? "-";
-
       final seatId = booking["seatId"]?.toString() ?? "-";
-
       final paymentId = booking["paymentId"]?.toString() ?? "-";
-
       final amount = booking["amount"]?.toString() ?? "0";
-
       final paymentStatus = booking["paymentStatus"]?.toString() ?? "-";
-
       final paymentMethod = booking["paymentMethod"]?.toString() ?? "-";
-
+      final paymentType = booking["paymentType"]?.toString() ?? "-";
       final transactionId = booking["transactionId"]?.toString() ?? "-";
-
       final paidAt = booking["paidAt"]?.toString() ?? "-";
-
       final startDate = booking["startDate"]?.toString() ?? "-";
-
       final endDate = booking["endDate"]?.toString() ?? "-";
 
       final pdf = pw.Document();
-
       pdf.addPage(
         pw.Page(
           pageFormat: PdfPageFormat.a4,
-
           margin: const pw.EdgeInsets.all(32),
-
           build: (pw.Context context) {
             return pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
-
               children: [
-                // =================================================
-                // HEADER
-                // =================================================
                 pw.Center(
                   child: pw.Text(
                     "READING ROOM",
@@ -1132,21 +1506,14 @@ class _StudentPageState extends State<StudentPage> {
                     ),
                   ),
                 ),
-
                 pw.SizedBox(height: 5),
-
                 pw.Center(
                   child: pw.Text(
                     "Payment Receipt",
                     style: const pw.TextStyle(fontSize: 16),
                   ),
                 ),
-
                 pw.SizedBox(height: 25),
-
-                // =================================================
-                // PAYMENT STATUS
-                // =================================================
                 pw.Container(
                   width: double.infinity,
                   padding: const pw.EdgeInsets.all(12),
@@ -1167,58 +1534,28 @@ class _StudentPageState extends State<StudentPage> {
                     ),
                   ),
                 ),
-
                 pw.SizedBox(height: 25),
-
-                // =================================================
-                // STUDENT INFORMATION
-                // =================================================
                 _pdfSectionTitle("Student Information"),
-
                 _pdfRow("Student Name", widget.name),
-
                 _pdfRow("Mobile Number", widget.mobile),
-
                 pw.SizedBox(height: 18),
-
-                // =================================================
-                // BOOKING INFORMATION
-                // =================================================
                 _pdfSectionTitle("Booking Information"),
-
                 _pdfRow("Booking ID", bookingId),
-
                 _pdfRow("Seat Number", seatNumber),
-
                 _pdfRow("Seat ID", seatId),
-
                 _pdfRow("Valid From", startDate),
-
                 _pdfRow("Valid Until", endDate),
-
                 pw.SizedBox(height: 18),
-
-                // =================================================
-                // PAYMENT INFORMATION
-                // =================================================
                 _pdfSectionTitle("Payment Information"),
-
                 _pdfRow("Payment ID", paymentId),
-
                 _pdfRow("Payment Status", paymentStatus),
-
+                _pdfRow("Payment Type", paymentType),
                 _pdfRow("Amount Paid", "Rs. $amount"),
-
                 _pdfRow("Payment Method", paymentMethod),
-
                 _pdfRow("Transaction ID", transactionId),
-
                 _pdfRow("Paid At", paidAt),
-
                 pw.Spacer(),
-
                 pw.Divider(),
-
                 pw.Center(
                   child: pw.Text(
                     "Thank you for using our Reading Room.",
@@ -1235,20 +1572,12 @@ class _StudentPageState extends State<StudentPage> {
       );
 
       final pdfBytes = await pdf.save();
-
-      // ==========================================================
-      // ANDROID SHARE / SAVE / PRINT
-      // ==========================================================
-
       await Printing.sharePdf(
         bytes: pdfBytes,
         filename: "payment_receipt_$bookingId.pdf",
       );
     } catch (e) {
-      debugPrint("PDF RECEIPT ERROR: $e");
-
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("Unable to generate receipt: $e"),
@@ -1257,10 +1586,6 @@ class _StudentPageState extends State<StudentPage> {
       );
     }
   }
-
-  // ============================================================
-  // RECEIPT ROW
-  // ============================================================
 
   Widget _receiptRow(String title, String value) {
     return Padding(
@@ -1274,9 +1599,7 @@ class _StudentPageState extends State<StudentPage> {
               style: const TextStyle(color: Colors.grey, fontSize: 12),
             ),
           ),
-
           const SizedBox(width: 10),
-
           Expanded(
             child: Text(
               value,
@@ -1289,10 +1612,6 @@ class _StudentPageState extends State<StudentPage> {
     );
   }
 
-  // ============================================================
-  // PDF SECTION TITLE
-  // ============================================================
-
   pw.Widget _pdfSectionTitle(String title) {
     return pw.Padding(
       padding: const pw.EdgeInsets.only(bottom: 8),
@@ -1302,10 +1621,6 @@ class _StudentPageState extends State<StudentPage> {
       ),
     );
   }
-
-  // ============================================================
-  // PDF ROW
-  // ============================================================
 
   pw.Widget _pdfRow(String title, String value) {
     return pw.Container(
@@ -1324,7 +1639,6 @@ class _StudentPageState extends State<StudentPage> {
               style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey700),
             ),
           ),
-
           pw.Expanded(
             flex: 3,
             child: pw.Text(
@@ -1339,19 +1653,6 @@ class _StudentPageState extends State<StudentPage> {
   }
 
   // ============================================================
-  // DRAWER
-  // ============================================================
-
-  Widget _buildDrawer() {
-    return AppDrawer(
-      userId: widget.userId,
-      name: widget.name,
-      mobile: widget.mobile,
-      selectedPage: "Student Management",
-      role: 'STUDENT',
-    );
-  }
-  // ============================================================
   // BUILD
   // ============================================================
 
@@ -1359,84 +1660,47 @@ class _StudentPageState extends State<StudentPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xffF6F7FB),
-
-      // ========================================================
-      // APP BAR
-      // ========================================================
       appBar: AppBar(
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
-
         title: const Text(
           "My Profile",
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
-
-      // ========================================================
-      // DRAWER
-      // ========================================================
       drawer: AppDrawer(
         userId: widget.userId,
         name: widget.name,
         mobile: widget.mobile,
-        selectedPage: 'Student Management',
-        role: 'STUDENT',
+        selectedPage: "Student Profile",
+        role: "STUDENT",
       ),
-
-      // ========================================================
-      // BODY
-      // ========================================================
       body: RefreshIndicator(
         onRefresh: refreshPage,
-
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-
           padding: const EdgeInsets.all(16),
-
           children: [
-            // ====================================================
-            // WELCOME
-            // ====================================================
             Text(
               "Welcome, ${widget.name} 👋",
               style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
-
             const SizedBox(height: 4),
-
             const Text(
               "Manage your profile, seat and payments",
               style: TextStyle(fontSize: 14, color: Colors.grey),
             ),
-
             const SizedBox(height: 18),
-
-            // ====================================================
-            // PROFILE
-            // ====================================================
             _profileCard(),
-
             const SizedBox(height: 18),
-
-            // ====================================================
-            // BOOKING TITLE
-            // ====================================================
             const Text(
               "Seat & Payment Information",
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
-
             const SizedBox(height: 10),
-
-            // ====================================================
-            // BOOKING
-            // ====================================================
             _activeBookingCard(),
-
             const SizedBox(height: 30),
           ],
         ),

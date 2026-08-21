@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'session_service.dart';
 
 class AuthService {
   static const String serverUrl =
@@ -275,7 +276,14 @@ class AuthService {
     print("FCM TOKEN URL: $uri");
 
     try {
-      final response = await http.put(uri).timeout(const Duration(seconds: 30));
+            final tokenValue = await SessionService.getToken();
+      final headers = {
+        'Content-Type': 'application/json',
+      };
+      if (tokenValue != null) {
+        headers['Authorization'] = 'Bearer $tokenValue';
+      }
+      final response = await http.put(uri, headers: headers).timeout(const Duration(seconds: 30));
 
       print("FCM TOKEN SAVE STATUS: ${response.statusCode}");
       print("FCM TOKEN SAVE RESPONSE: ${response.body}");

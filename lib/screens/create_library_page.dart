@@ -18,6 +18,8 @@ class _CreateLibraryPageState extends State<CreateLibraryPage> {
   int seatCapacity = 50;
   double fullFee = 1000.0;
   double concessionalFee = 700.0;
+  String razorpayKeyId = '';
+  String razorpayKeySecret = '';
 
   bool _isLoading = false;
 
@@ -40,6 +42,8 @@ class _CreateLibraryPageState extends State<CreateLibraryPage> {
         "seatCapacity": seatCapacity,
         "fullFee": fullFee,
         "concessionalFee": concessionalFee,
+        "razorpayKeyId": razorpayKeyId,
+        "razorpayKeySecret": razorpayKeySecret,
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -112,7 +116,7 @@ class _CreateLibraryPageState extends State<CreateLibraryPage> {
                       children: [
                         Expanded(
                           child: TextFormField(
-                            decoration: InputDecoration(labelText: 'Full Fee (₹)', border: OutlineInputBorder()),
+                            decoration: InputDecoration(labelText: 'Full Fee (â‚¹)', border: OutlineInputBorder()),
                             keyboardType: TextInputType.number,
                             initialValue: '1000',
                             validator: (v) => v!.isEmpty ? 'Required' : null,
@@ -122,7 +126,7 @@ class _CreateLibraryPageState extends State<CreateLibraryPage> {
                         SizedBox(width: 10),
                         Expanded(
                           child: TextFormField(
-                            decoration: InputDecoration(labelText: 'Concessional Fee (₹)', border: OutlineInputBorder()),
+                            decoration: InputDecoration(labelText: 'Concessional Fee (â‚¹)', border: OutlineInputBorder()),
                             keyboardType: TextInputType.number,
                             initialValue: '700',
                             validator: (v) => v!.isEmpty ? 'Required' : null,
@@ -130,6 +134,21 @@ class _CreateLibraryPageState extends State<CreateLibraryPage> {
                           ),
                         ),
                       ],
+                    ),
+                                        SizedBox(height: 20),
+                    Text('Bank / Razorpay Details', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    SizedBox(height: 10),
+                    TextFormField(
+                      decoration: InputDecoration(labelText: 'Razorpay Key ID', border: OutlineInputBorder()),
+                      validator: (v) => v!.isEmpty ? 'Required' : null,
+                      onSaved: (v) => razorpayKeyId = v!,
+                    ),
+                    SizedBox(height: 10),
+                    TextFormField(
+                      decoration: InputDecoration(labelText: 'Razorpay Key Secret', border: OutlineInputBorder()),
+                      obscureText: true,
+                      validator: (v) => v!.isEmpty ? 'Required' : null,
+                      onSaved: (v) => razorpayKeySecret = v!,
                     ),
                     SizedBox(height: 20),
                     Text('Owner Credentials', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),

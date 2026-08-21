@@ -1,4 +1,4 @@
-﻿import 'session_service.dart';
+import 'session_service.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
@@ -10,7 +10,7 @@ class OwnerService {
   // COMMON HEADERS
   // =========================================================
 
-  static Map<String, String> _headers(String token) {
+  static Future<Map<String, String>> _headers(String token) async {
     final Map<String, String> headers = {
       "Content-Type": "application/json",
       "Authorization": "Bearer $token",
@@ -29,7 +29,7 @@ class OwnerService {
   static Future<List<dynamic>> getAllUsers(String token) async {
     final response = await http.get(
       Uri.parse("$baseUrl/owner/users"),
-      headers: _headers(token),
+      headers: await _headers(token),
     );
 
     print("GET USERS STATUS: ${response.statusCode}");
@@ -60,7 +60,7 @@ class OwnerService {
   static Future<List<dynamic>> getAllBookings(String token) async {
     final response = await http.get(
       Uri.parse("$baseUrl/owner/bookings"),
-      headers: _headers(token),
+      headers: await _headers(token),
     );
 
     print("GET BOOKINGS STATUS: ${response.statusCode}");
@@ -91,7 +91,7 @@ class OwnerService {
   static Future<List<dynamic>> getAllPayments(String token) async {
     final response = await http.get(
       Uri.parse("$baseUrl/owner/payments"),
-      headers: _headers(token),
+      headers: await _headers(token),
     );
 
     print("GET PAYMENTS STATUS: ${response.statusCode}");
@@ -171,7 +171,7 @@ class OwnerService {
       "$baseUrl/owner/users/history",
     ).replace(queryParameters: {"mobile": mobile});
 
-    final response = await http.get(uri, headers: _headers(token));
+    final response = await http.get(uri, headers: await _headers(token));
 
     print("PAYMENT HISTORY STATUS: ${response.statusCode}");
     print("PAYMENT HISTORY BODY: ${response.body}");
@@ -202,7 +202,7 @@ class OwnerService {
     final response = await http
         .get(
           Uri.parse("$baseUrl/owner/dashboard-stats"),
-          headers: _headers(token),
+          headers: await _headers(token),
         )
         .timeout(const Duration(seconds: 30));
 
@@ -238,7 +238,7 @@ class OwnerService {
     final response = await http
         .get(
           Uri.parse("$baseUrl/bookings/owner/pending"),
-          headers: {..._headers(token), "X-USER-ID": ownerId.toString()},
+          headers: {...await _headers(token), "X-USER-ID": ownerId.toString()},
         )
         .timeout(const Duration(seconds: 30));
 
@@ -278,7 +278,7 @@ class OwnerService {
     final response = await http
         .get(
           Uri.parse("$baseUrl/payments/owner/pending"),
-          headers: {..._headers(token), "X-USER-ID": ownerId.toString()},
+          headers: {...await _headers(token), "X-USER-ID": ownerId.toString()},
         )
         .timeout(const Duration(seconds: 30));
 
@@ -318,7 +318,7 @@ class OwnerService {
     final response = await http
         .get(
           Uri.parse("$baseUrl/payments/owner/pending/count"),
-          headers: {..._headers(token), "X-USER-ID": ownerId.toString()},
+          headers: {...await _headers(token), "X-USER-ID": ownerId.toString()},
         )
         .timeout(const Duration(seconds: 30));
 
@@ -370,7 +370,7 @@ class OwnerService {
     final response = await http
         .post(
           Uri.parse(url),
-          headers: {..._headers(token), "X-USER-ID": ownerId.toString()},
+          headers: {...await _headers(token), "X-USER-ID": ownerId.toString()},
         )
         .timeout(const Duration(seconds: 30));
 
@@ -416,7 +416,7 @@ class OwnerService {
     final response = await http
         .post(
           Uri.parse(url),
-          headers: {..._headers(token), "X-USER-ID": ownerId.toString()},
+          headers: {...await _headers(token), "X-USER-ID": ownerId.toString()},
         )
         .timeout(const Duration(seconds: 30));
 
@@ -462,7 +462,7 @@ class OwnerService {
     final response = await http
         .post(
           Uri.parse(url),
-          headers: {..._headers(token), "X-USER-ID": ownerId.toString()},
+          headers: {...await _headers(token), "X-USER-ID": ownerId.toString()},
         )
         .timeout(const Duration(seconds: 30));
 
@@ -508,7 +508,7 @@ class OwnerService {
     final response = await http
         .delete(
           Uri.parse(url),
-          headers: {..._headers(token), "X-USER-ID": ownerId.toString()},
+          headers: {...await _headers(token), "X-USER-ID": ownerId.toString()},
         )
         .timeout(const Duration(seconds: 30));
 

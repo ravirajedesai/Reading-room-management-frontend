@@ -7,6 +7,7 @@ import '../widgets/custom_text_field.dart';
 
 import 'register_page.dart';
 import 'dashboard_page.dart';
+import 'super_admin_dashboard_page.dart';
 import 'library_selection_page.dart';
 import 'owner_dashboard_page.dart';
 
@@ -208,6 +209,12 @@ class _LoginPageState extends State<LoginPage> {
       // ======================================================
       // OWNER DASHBOARD
       // ======================================================
+
+            if (role == 'SUPER_ADMIN') {
+        debugPrint("OPENING SUPER ADMIN DASHBOARD");
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => SuperAdminDashboardPage()));
+        return;
+      }
 
       if (role == 'OWNER') {
         debugPrint("OPENING OWNER DASHBOARD");
@@ -618,4 +625,5 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 }
+
 

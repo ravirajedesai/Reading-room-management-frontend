@@ -98,5 +98,23 @@ class SessionService {
 
     await prefs.clear();
   }
-}
 
+  // =========================================================
+  // ACTIVE LIBRARY ID
+  // =========================================================
+
+  static Future<void> saveActiveLibraryId(int libraryId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('activeLibraryId', libraryId);
+  }
+
+  static Future<int?> getActiveLibraryId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt('activeLibraryId');
+  }
+
+  static Future<void> clearActiveLibraryId() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('activeLibraryId');
+  }
+}

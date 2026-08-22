@@ -6,6 +6,8 @@ import '../models/payment_model.dart';
 import '../services/payment_service.dart';
 import '../services/booking_service.dart';
 import '../models/booking_model.dart';
+import 'pomodoro_page.dart';
+import '../services/study_tracker_service.dart';
 
 class DashboardPage extends StatefulWidget {
   final int userId;
@@ -363,6 +365,9 @@ class _DashboardPageState extends State<DashboardPage> {
                 // WELCOME
                 // =================================================
                 _welcomeSection(),
+
+                const SizedBox(height: 18),
+                _pomodoroHeroBanner(),
 
                 const SizedBox(height: 26),
 
@@ -872,6 +877,113 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ],
       ),
+    );
+  }
+
+  // =============================================================
+  // POMODORO HERO BANNER
+  // =============================================================
+
+  Widget _pomodoroHeroBanner() {
+    return FutureBuilder<int>(
+      future: StudyTrackerService.getTodayStudyMinutes(),
+      builder: (context, snapshot) {
+        final todayMins = snapshot.data ?? 0;
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF1E1B4B), Color(0xFF312E81)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF312E81).withValues(alpha: 0.35),
+                blurRadius: 12,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.timer_outlined, color: Colors.white, size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Pomodoro Focus Mode',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.local_fire_department, color: Colors.orangeAccent, size: 14),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Today: ${StudyTrackerService.formatMinutesToHours(todayMins)}',
+                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Boost your daily study retention with 25-minute distraction-free focus cycles.',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12, height: 1.3),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const PomodoroPage()),
+                    );
+                    if (mounted) setState(() {});
+                  },
+                  icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                  label: const Text(
+                    'START FOCUS SESSION (25M)',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.4),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF312E81),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 

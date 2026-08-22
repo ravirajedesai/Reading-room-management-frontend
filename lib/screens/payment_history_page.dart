@@ -848,38 +848,36 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
 
   Widget _placeholderState() {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(30),
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              height: 80,
-              width: 80,
+              height: 70,
+              width: 70,
               decoration: const BoxDecoration(
                 color: Color(0xFFEFF1FF),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
                 Icons.search_rounded,
-                size: 40,
+                size: 34,
                 color: Color(0xFF4054C7),
               ),
             ),
-
-            const SizedBox(height: 16),
-
+            const SizedBox(height: 14),
             const Text(
               'Search a student',
               style: TextStyle(
-                fontSize: 17,
+                fontSize: 16,
                 fontWeight: FontWeight.bold,
                 color: Color(0xFF172033),
               ),
             ),
-
-            const SizedBox(height: 6),
-
+            const SizedBox(height: 5),
             Text(
               'Enter a 10-digit mobile number above\n'
               'to view payment history.',
@@ -898,50 +896,46 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
 
   Widget _emptyState() {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(30),
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              height: 80,
-              width: 80,
+              height: 70,
+              width: 70,
               decoration: BoxDecoration(
                 color: Colors.grey.shade100,
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.history_rounded,
-                size: 40,
+                size: 34,
                 color: Colors.grey.shade400,
               ),
             ),
-
-            const SizedBox(height: 16),
-
+            const SizedBox(height: 14),
             const Text(
               'No payment history found',
               style: TextStyle(
-                fontSize: 17,
+                fontSize: 16,
                 fontWeight: FontWeight.bold,
                 color: Color(0xFF172033),
               ),
             ),
-
-            const SizedBox(height: 6),
-
+            const SizedBox(height: 5),
             Text(
               'No payment records were found\n'
               'for $_searchedMobile.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
             ),
-
-            const SizedBox(height: 18),
-
+            const SizedBox(height: 16),
             OutlinedButton.icon(
               onPressed: _clearSearch,
-              icon: const Icon(Icons.search_rounded),
+              icon: const Icon(Icons.search_rounded, size: 18),
               label: const Text('Search Again'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: const Color(0xFF4054C7),

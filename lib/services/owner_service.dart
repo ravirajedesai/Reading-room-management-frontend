@@ -130,8 +130,7 @@ class OwnerService {
           .get(
             Uri.parse('$baseUrl/owner/paid-students?page=$page&size=$size'),
             headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $token',
+              ...await _headers(token),
               if (ownerId != null) 'X-USER-ID': ownerId.toString(),
             },
           )
@@ -296,55 +295,13 @@ class OwnerService {
         return decoded;
       }
 
-      throw Exception("Invalid pending payment response format.");
+      throw Exception("Invalid pending payments response format.");
     }
 
     _handleCommonErrors(response);
 
     throw Exception(
-      "Failed to load pending payment requests: "
-      "${response.statusCode} ${response.body}",
-    );
-  }
-
-  // =========================================================
-  // GET PENDING PAYMENT REQUEST COUNT
-  // =========================================================
-
-  static Future<int> getPendingPaymentRequestCount(
-    String token,
-    int ownerId,
-  ) async {
-    final response = await http
-        .get(
-          Uri.parse("$baseUrl/payments/owner/pending/count"),
-          headers: {...await _headers(token), "X-USER-ID": ownerId.toString()},
-        )
-        .timeout(const Duration(seconds: 30));
-
-    print("=========================================");
-    print("PENDING PAYMENT COUNT");
-    print("OWNER ID: $ownerId");
-    print("STATUS: ${response.statusCode}");
-    print("BODY: ${response.body}");
-    print("=========================================");
-
-    if (response.statusCode == 200) {
-      final decoded = jsonDecode(response.body);
-
-      if (decoded is Map<String, dynamic>) {
-        final count = (decoded["pendingPaymentRequests"] as num?)?.toInt();
-
-        return count ?? 0;
-      }
-
-      throw Exception("Invalid pending payment count response format.");
-    }
-
-    _handleCommonErrors(response);
-
-    throw Exception(
-      "Failed to load pending payment count: "
+      "Failed to load pending payments: "
       "${response.statusCode} ${response.body}",
     );
   }
@@ -526,7 +483,7 @@ class OwnerService {
   // COMMON ERROR HANDLING
   // =========================================================
 
-  static Never _handleCommonErrors(http.Response response) {
+  static void _handleCommonErrors(http.Response response) {
     if (response.statusCode == 401) {
       throw Exception("Session expired. Please login again.");
     }
@@ -542,37 +499,5 @@ class OwnerService {
     if (response.statusCode == 500) {
       throw Exception("Server error: ${response.body}");
     }
-
-    throw Exception(
-      "Request failed: "
-      "${response.statusCode} ${response.body}",
-    );
-  }
-
-  static Future<void> cancelPendingBooking({
-    required String token,
-    required int bookingId,
-    int? seatId,
-  }) async {
-    final response = await http.post(
-      Uri.parse(
-        '$baseUrl/api/owner/bookings/$bookingId/cancel',
-      ), // or your backend endpoint
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode({
-        'bookingId': bookingId,
-        'seatId': seatId,
-        'status': 'CANCELLED',
-      }),
-    );
-
-    if (response.statusCode != 200 && response.statusCode != 204) {
-      final body = jsonDecode(response.body);
-      throw body['message'] ?? 'Failed to release seat hold.';
-    }
   }
 }
-

@@ -74,4 +74,28 @@ class LibraryService {
       throw Exception("Failed to fetch all libraries");
     }
   }
+  static Future<Map<String, dynamic>> assignOwner(int libraryId, String ownerMobile) async {
+    final token = await SessionService.getToken();
+    final url = Uri.parse("$baseUrl/$libraryId/assign-owner?ownerMobile=$ownerMobile");
+
+    final response = await http.post(
+      url,
+      headers: {
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      dynamic errorBody;
+      try {
+        errorBody = jsonDecode(response.body);
+      } catch (_) {}
+      String message = (errorBody is Map && errorBody['message'] != null)
+          ? errorBody['message']
+          : response.body;
+      throw Exception(message);
+    }
+  }
 }

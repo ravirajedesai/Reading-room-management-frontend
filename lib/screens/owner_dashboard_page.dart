@@ -5,9 +5,11 @@ import '../services/owner_service.dart';
 import '../services/session_service.dart';
 
 import '../screens/paid_students_page.dart';
-import '../screens/payment_history_page.dart';
 import '../screens/owner_pending_payments_page.dart';
 import '../screens/owner_pending_seats_page.dart';
+import '../models/seat_model.dart';
+import '../services/seat_service.dart';
+import '../services/library_service.dart';
 
 class OwnerDashboardPage extends StatefulWidget {
   final int userId;
@@ -34,6 +36,10 @@ class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
   double _cashCollection = 0.0;
   int _pendingPaymentRequests = 0;
   int _pendingSeats = 0;
+
+  List<Seat> _seats = [];
+  bool _loadingSeats = false;
+  String _seatFilter = 'ALL';
 
   bool loadingDashboard = true;
   bool _hasCache = false;
@@ -68,32 +74,56 @@ class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
         return;
       }
 
-      final stats = await OwnerService.getDashboardStats(token);
-      _totalPaidStudents = (stats['totalPaidStudents'] as num?)?.toInt() ?? 0;
-      _totalMonthCollection =
-          (stats['totalMonthCollection'] as num?)?.toDouble() ?? 0.0;
-      _cashCollection = (stats['cashCollection'] as num?)?.toDouble() ?? 0.0;
-
-      try {
-        final pendingPayments = await OwnerService.getPendingPaymentRequests(
-          token,
-          widget.userId,
-        );
-        _pendingPaymentRequests = pendingPayments.length;
-      } catch (e) {
-        debugPrint('PENDING PAYMENT REQUEST ERROR: $e');
-        _pendingPaymentRequests = 0;
+      // Ensure active library is set for this Owner
+      var activeLibId = await SessionService.getActiveLibraryId();
+      if (activeLibId == null) {
+        try {
+          final myLibs = await LibraryService.getMyLibraries();
+          if (myLibs.isNotEmpty) {
+            activeLibId = myLibs.first.id;
+            await SessionService.saveActiveLibraryId(activeLibId);
+          }
+        } catch (e) {
+          debugPrint('OWNER ACTIVE LIB FETCH ERROR: $e');
+        }
       }
 
-      try {
-        final pendingBookings = await OwnerService.getPendingBookings(
-          token,
-          widget.userId,
-        );
-        _pendingSeats = pendingBookings.length;
-      } catch (e) {
-        debugPrint('PENDING SEATS ERROR: $e');
-        _pendingSeats = 0;
+      // Execute all 4 API calls concurrently in PARALLEL for maximum speed
+      final results = await Future.wait([
+        OwnerService.getDashboardStats(token).catchError((e) {
+          debugPrint('DASHBOARD STATS ERROR: $e');
+          return <String, dynamic>{};
+        }),
+        OwnerService.getPendingPaymentRequests(token, widget.userId).catchError((e) {
+          debugPrint('PENDING PAYMENTS ERROR: $e');
+          return <dynamic>[];
+        }),
+        OwnerService.getPendingBookings(token, widget.userId).catchError((e) {
+          debugPrint('PENDING SEATS ERROR: $e');
+          return <dynamic>[];
+        }),
+        SeatService().getAllSeats().catchError((e) {
+          debugPrint('SEATS LOAD ERROR: $e');
+          return <Seat>[];
+        }),
+      ]);
+
+      final stats = results[0] as Map<String, dynamic>;
+      final pendingPayments = results[1] as List<dynamic>;
+      final pendingBookings = results[2] as List<dynamic>;
+      final seats = results[3] as List<Seat>;
+
+      if (stats.isNotEmpty) {
+        _totalPaidStudents = (stats['totalPaidStudents'] as num?)?.toInt() ?? 0;
+        _totalMonthCollection =
+            (stats['totalMonthCollection'] as num?)?.toDouble() ?? 0.0;
+        _cashCollection = (stats['cashCollection'] as num?)?.toDouble() ?? 0.0;
+      }
+
+      _pendingPaymentRequests = pendingPayments.length;
+      _pendingSeats = pendingBookings.length;
+      if (seats.isNotEmpty) {
+        _seats = seats;
       }
 
       if (!mounted) return;
@@ -127,18 +157,7 @@ class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
     );
   }
 
-  void _openPaymentHistory() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => PaymentHistoryPage(
-          userId: widget.userId,
-          name: widget.name,
-          mobile: widget.mobile,
-          role: 'OWNER',
-        ),
-      ),
-    );
-  }
+
 
   Future<void> _openPendingPaymentRequests() async {
     await Navigator.of(context).push(
@@ -226,21 +245,10 @@ class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
 
                   // Equal Height Metrics Grid
                   _buildMetricsGrid(),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
 
-                  // Quick Action Shortcuts Header
-                  const Text(
-                    'Quick Actions',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF0F172A),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Equal Height Quick Action Shortcuts
-                  _buildQuickActions(),
+                  // LIVE SEAT STRUCTURE & OCCUPANCY MAP
+                  _buildSeatStructureSection(),
                 ],
               ],
             ),
@@ -884,119 +892,268 @@ class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
   }
 
   // ===========================================================
-  // QUICK ACTIONS (INTRINSIC HEIGHT ALIGNED)
+  // LIVE SEAT STRUCTURE & OCCUPANCY MAP
   // ===========================================================
 
-  Widget _buildQuickActions() {
-    return Column(
-      children: [
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget _buildSeatStructureSection() {
+    final availableCount = _seats.where((s) => s.isAvailable).length;
+    final bookedCount = _seats.where((s) => s.isBooked).length;
+    final pendingCount = _seats.where((s) => s.isPending).length;
+
+    List<Seat> filteredSeats = _seats;
+    if (_seatFilter == 'AVAILABLE') {
+      filteredSeats = _seats.where((s) => s.isAvailable).toList();
+    } else if (_seatFilter == 'BOOKED') {
+      filteredSeats = _seats.where((s) => s.isBooked).toList();
+    } else if (_seatFilter == 'PENDING') {
+      filteredSeats = _seats.where((s) => s.isPending).toList();
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Section Title & Refresh Button
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Expanded(
-                child: _quickActionButton(
-                  title: 'Paid Students',
-                  icon: Icons.people_outline_rounded,
-                  color: const Color(0xFF3B50DF),
-                  bgColor: const Color(0xFFEEF2FF),
-                  onTap: _openPaidStudents,
-                ),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEEF2FF),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.grid_view_rounded,
+                      color: Color(0xFF3B50DF),
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Live Seat Structure',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
+                      SizedBox(height: 1),
+                      Text(
+                        'Visual room layout & occupancy',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _quickActionButton(
-                  title: 'Payment History',
-                  icon: Icons.history_rounded,
-                  color: const Color(0xFF0EA5E9),
-                  bgColor: const Color(0xFFF0F9FF),
-                  onTap: _openPaymentHistory,
-                ),
+              IconButton(
+                icon: const Icon(Icons.refresh_rounded, size: 20, color: Color(0xFF3B50DF)),
+                tooltip: 'Refresh Seats',
+                onPressed: () async {
+                  setState(() => _loadingSeats = true);
+                  try {
+                    final seats = await SeatService().getAllSeats();
+                    if (mounted) setState(() => _seats = seats);
+                  } catch (e) {
+                    debugPrint('Refresh error: $e');
+                  } finally {
+                    if (mounted) setState(() => _loadingSeats = false);
+                  }
+                },
               ),
             ],
           ),
+          const SizedBox(height: 14),
+
+          // Status Legend
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFF1F5F9)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildLegendItem('Available', const Color(0xFF10B981), availableCount),
+                _buildLegendItem('Booked', const Color(0xFFEF4444), bookedCount),
+                _buildLegendItem('On Hold', const Color(0xFFF59E0B), pendingCount),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Filter Chips
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildFilterChip('All (${_seats.length})', 'ALL'),
+                const SizedBox(width: 8),
+                _buildFilterChip('Available ($availableCount)', 'AVAILABLE'),
+                const SizedBox(width: 8),
+                _buildFilterChip('Booked ($bookedCount)', 'BOOKED'),
+                const SizedBox(width: 8),
+                _buildFilterChip('Hold ($pendingCount)', 'PENDING'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Grid View
+          if (_loadingSeats)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 40),
+              child: Center(
+                child: CircularProgressIndicator(color: Color(0xFF3B50DF)),
+              ),
+            )
+          else if (filteredSeats.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 30),
+              alignment: Alignment.center,
+              child: Text(
+                'No seats found in this filter.',
+                style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+              ),
+            )
+          else
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: filteredSeats.length,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 5,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+                childAspectRatio: 1.05,
+              ),
+              itemBuilder: (context, index) {
+                final seat = filteredSeats[index];
+                return _buildSeatTile(seat);
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLegendItem(String label, Color color, int count) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 9,
+          height: 9,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
         ),
-        const SizedBox(height: 10),
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: _quickActionButton(
-                  title: 'Approvals',
-                  icon: Icons.check_circle_outline_rounded,
-                  color: const Color(0xFFF59E0B),
-                  bgColor: const Color(0xFFFFFBEB),
-                  onTap: _openPendingPaymentRequests,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _quickActionButton(
-                  title: 'Pending Holds',
-                  icon: Icons.event_seat_outlined,
-                  color: const Color(0xFFEF4444),
-                  bgColor: const Color(0xFFFEF2F2),
-                  onTap: _openPendingSeats,
-                ),
-              ),
-            ],
+        const SizedBox(width: 5),
+        Text(
+          '$label: $count',
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF334155),
           ),
         ),
       ],
     );
   }
 
-  Widget _quickActionButton({
-    required String title,
-    required IconData icon,
-    required Color color,
-    required Color bgColor,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(7),
-                decoration: BoxDecoration(
-                  color: bgColor,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: color, size: 17),
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF1E293B),
-                  ),
-                ),
-              ),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: Colors.grey.shade400,
-                size: 17,
-              ),
-            ],
+  Widget _buildFilterChip(String label, String value) {
+    final isSelected = _seatFilter == value;
+    return InkWell(
+      onTap: () => setState(() => _seatFilter = value),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF3B50DF) : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : const Color(0xFF475569),
+            fontSize: 11.5,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSeatTile(Seat seat) {
+    Color borderColor;
+    Color bgColor;
+    Color textColor;
+    IconData icon;
+
+    if (seat.isBooked) {
+      borderColor = const Color(0xFFFCA5A5);
+      bgColor = const Color(0xFFFEF2F2);
+      textColor = const Color(0xFFDC2626);
+      icon = Icons.lock_outline_rounded;
+    } else if (seat.isPending) {
+      borderColor = const Color(0xFFFDE68A);
+      bgColor = const Color(0xFFFFFBEB);
+      textColor = const Color(0xFFD97706);
+      icon = Icons.hourglass_empty_rounded;
+    } else {
+      borderColor = const Color(0xFFA7F3D0);
+      bgColor = const Color(0xFFF0FDF4);
+      textColor = const Color(0xFF059669);
+      icon = Icons.event_seat_rounded;
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor, width: 1.2),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 14, color: textColor),
+          const SizedBox(height: 2),
+          Text(
+            '${seat.seatNumber}',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: textColor,
+            ),
+          ),
+        ],
       ),
     );
   }

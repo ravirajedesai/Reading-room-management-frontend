@@ -5,7 +5,11 @@ import 'package:printing/printing.dart';
 
 import '../services/booking_service.dart';
 import '../services/student_service.dart';
+import '../models/booking_model.dart';
+import 'payment_page.dart';
 import 'seat_booking_page.dart';
+import 'pomodoro_page.dart';
+import '../services/study_tracker_service.dart';
 import '../widgets/app_drawer.dart';
 
 class StudentPage extends StatefulWidget {
@@ -259,6 +263,193 @@ class _StudentPageState extends State<StudentPage> {
     if (value == null) return defaultValue;
     final text = value.toString().trim();
     return text.isEmpty ? defaultValue : text;
+  }
+
+  // ============================================================
+  // STUDY ANALYTICS & POMODORO CARD
+  // ============================================================
+
+  Widget _studyAnalyticsCard() {
+    return FutureBuilder<List<int>>(
+      future: Future.wait([
+        StudyTrackerService.getTodayStudyMinutes(),
+        StudyTrackerService.getThisWeekStudyMinutes(),
+        StudyTrackerService.getStreakDays(),
+        StudyTrackerService.getTotalPomodoroCount(),
+      ]),
+      builder: (context, snapshot) {
+        final todayMins = snapshot.data?[0] ?? 0;
+        final weekMins = snapshot.data?[1] ?? 0;
+        final streak = snapshot.data?[2] ?? 1;
+        final pomodoros = snapshot.data?[3] ?? 0;
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(9),
+                          decoration: BoxDecoration(
+                            color: Colors.indigo.shade50,
+                            borderRadius: BorderRadius.circular(11),
+                          ),
+                          child: const Icon(Icons.timer_outlined, color: Colors.indigo, size: 22),
+                        ),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Study Time & Pomodoro",
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                "Productivity statistics",
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(color: Colors.grey, fontSize: 11),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.indigo.shade800,
+                      side: BorderSide(color: Colors.indigo.shade200),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    ),
+                    icon: const Icon(Icons.play_circle_outline, size: 16),
+                    label: const Text("Focus Mode", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    onPressed: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const PomodoroPage()),
+                      );
+                      if (mounted) setState(() {});
+                    },
+                  ),
+                ],
+              ),
+              const Divider(height: 24, thickness: 0.8),
+              // 4 Metrics Grid
+              Row(
+                children: [
+                  Expanded(
+                    child: _studyMetricItem(
+                      icon: Icons.hourglass_bottom_rounded,
+                      label: "Today's Study",
+                      value: StudyTrackerService.formatMinutesToHours(todayMins),
+                      color: Colors.indigo,
+                      bgColor: Colors.indigo.shade50,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _studyMetricItem(
+                      icon: Icons.calendar_view_week_rounded,
+                      label: "This Week",
+                      value: StudyTrackerService.formatMinutesToHours(weekMins),
+                      color: Colors.teal,
+                      bgColor: Colors.teal.shade50,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: _studyMetricItem(
+                      icon: Icons.local_fire_department_rounded,
+                      label: "Study Streak",
+                      value: "$streak Days",
+                      color: Colors.orange.shade800,
+                      bgColor: Colors.orange.shade50,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _studyMetricItem(
+                      icon: Icons.check_circle_outline_rounded,
+                      label: "Pomodoros",
+                      value: "$pomodoros Cycles",
+                      color: Colors.deepPurple,
+                      bgColor: Colors.deepPurple.shade50,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _studyMetricItem({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+    required Color bgColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.15)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 10),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // ============================================================
@@ -1184,13 +1375,24 @@ class _StudentPageState extends State<StudentPage> {
       return;
     }
 
+    Booking? bookingObj;
+    try {
+      bookingObj = Booking.fromJson(booking);
+    } catch (_) {
+      bookingObj = Booking(
+        id: int.tryParse(booking["bookingId"]?.toString() ?? booking["id"]?.toString() ?? ""),
+        userId: widget.userId,
+        seatId: int.tryParse(booking["seatId"]?.toString() ?? ""),
+        seatNumber: int.tryParse(booking["seatNumber"]?.toString() ?? ""),
+        amount: double.tryParse(booking["amount"]?.toString() ?? ""),
+      );
+    }
+
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => SeatBookingPage(
-          userId: widget.userId,
-          name: widget.name,
-          mobile: widget.mobile,
+        builder: (context) => PaymentPage(
+          booking: bookingObj!,
         ),
       ),
     );
@@ -1692,6 +1894,8 @@ class _StudentPageState extends State<StudentPage> {
               "Manage your profile, seat and payments",
               style: TextStyle(fontSize: 14, color: Colors.grey),
             ),
+            const SizedBox(height: 18),
+            _studyAnalyticsCard(),
             const SizedBox(height: 18),
             _profileCard(),
             const SizedBox(height: 18),

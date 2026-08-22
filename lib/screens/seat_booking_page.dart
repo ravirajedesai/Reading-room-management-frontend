@@ -5,6 +5,7 @@ import '../models/booking_model.dart';
 import '../services/seat_service.dart';
 import '../services/booking_service.dart';
 import '../services/student_service.dart';
+import '../services/session_service.dart';
 
 import 'payment_page.dart';
 import 'dashboard_page.dart';
@@ -44,6 +45,7 @@ class _SeatBookingPageState extends State<SeatBookingPage> {
 
   bool isLoading = true;
   bool isBooking = false;
+  String _libraryName = "Library Management";
 
   // ============================================================
   // TEMPORARILY UNAVAILABLE SEATS
@@ -61,7 +63,17 @@ class _SeatBookingPageState extends State<SeatBookingPage> {
   @override
   void initState() {
     super.initState();
+    _loadLibraryName();
     loadSeats();
+  }
+
+  Future<void> _loadLibraryName() async {
+    final name = await SessionService.getActiveLibraryName();
+    if (mounted && name != null && name.isNotEmpty) {
+      setState(() {
+        _libraryName = name;
+      });
+    }
   }
 
   // ============================================================
@@ -1440,18 +1452,20 @@ class _SeatBookingPageState extends State<SeatBookingPage> {
         elevation: 0,
         backgroundColor: Colors.white,
         surfaceTintColor: Colors.white,
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              "Library Management",
-              style: TextStyle(
+              _libraryName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
                 color: Colors.black87,
               ),
             ),
-            Text(
+            const Text(
               "Seat Reservation",
               style: TextStyle(fontSize: 11, color: Colors.grey),
             ),

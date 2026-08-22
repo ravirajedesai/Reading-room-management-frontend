@@ -67,6 +67,9 @@ class _DashboardPageState extends State<DashboardPage> {
   // PENDING / NOT_REQUIRED are ignored.
   // =========================================================
 
+  String _activeLibraryName = 'Reading Room';
+  String? _activeLibraryAddress;
+
   Payment? _paymentNotification;
 
   bool loadingNotification = false;
@@ -86,8 +89,19 @@ class _DashboardPageState extends State<DashboardPage> {
   // LOAD COMPLETE DASHBOARD
   // =========================================================
 
+  Future<void> _loadLibraryInfo() async {
+    final name = await SessionService.getActiveLibraryName();
+    final address = await SessionService.getActiveLibraryAddress();
+    if (mounted && name != null && name.isNotEmpty) {
+      setState(() {
+        _activeLibraryName = name;
+        _activeLibraryAddress = address;
+      });
+    }
+  }
+
   Future<void> loadDashboardData() async {
-    await Future.wait([loadSeatData(), loadPaymentNotification()]);
+    await Future.wait([_loadLibraryInfo(), loadSeatData(), loadPaymentNotification()]);
   }
 
   // =========================================================
@@ -278,14 +292,57 @@ class _DashboardPageState extends State<DashboardPage> {
         backgroundColor: Colors.white,
         foregroundColor: const Color(0xFF172033),
         elevation: 0,
-        centerTitle: false,
-
-        title: const Text(
-          'Reading Room',
-          style: TextStyle(
-            fontSize: 21,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF172033),
+        title: InkWell(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => LibrarySelectionPage()),
+            ).then((_) => _loadLibraryInfo());
+          },
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.location_on_rounded, size: 18, color: Color(0xFF4054C7)),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        _activeLibraryName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF172033),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    const Icon(Icons.keyboard_arrow_down_rounded, size: 20, color: Color(0xFF4054C7)),
+                  ],
+                ),
+                if (_activeLibraryAddress != null && _activeLibraryAddress!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 22),
+                    child: Text(
+                      _activeLibraryAddress!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
 

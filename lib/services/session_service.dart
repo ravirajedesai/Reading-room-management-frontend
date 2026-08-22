@@ -100,8 +100,21 @@ class SessionService {
   }
 
   // =========================================================
-  // ACTIVE LIBRARY ID
+  // ACTIVE LIBRARY DETAILS
   // =========================================================
+
+  static Future<void> saveActiveLibrary({
+    required int id,
+    required String name,
+    String? address,
+    String? code,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('activeLibraryId', id);
+    await prefs.setString('activeLibraryName', name);
+    if (address != null) await prefs.setString('activeLibraryAddress', address);
+    if (code != null) await prefs.setString('activeLibraryCode', code);
+  }
 
   static Future<void> saveActiveLibraryId(int libraryId) async {
     final prefs = await SharedPreferences.getInstance();
@@ -113,8 +126,21 @@ class SessionService {
     return prefs.getInt('activeLibraryId');
   }
 
+  static Future<String?> getActiveLibraryName() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('activeLibraryName');
+  }
+
+  static Future<String?> getActiveLibraryAddress() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('activeLibraryAddress');
+  }
+
   static Future<void> clearActiveLibraryId() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('activeLibraryId');
+    await prefs.remove('activeLibraryName');
+    await prefs.remove('activeLibraryAddress');
+    await prefs.remove('activeLibraryCode');
   }
 }

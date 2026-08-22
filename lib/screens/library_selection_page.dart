@@ -43,8 +43,13 @@ class _LibrarySelectionPageState extends State<LibrarySelectionPage> {
   }
 
   Future<void> _selectLibrary(LibraryModel library) async {
-    await SessionService.saveActiveLibraryId(library.id);
-        final userId = await SessionService.getUserId();
+    await SessionService.saveActiveLibrary(
+      id: library.id,
+      name: library.name,
+      address: library.address,
+      code: library.code,
+    );
+    final userId = await SessionService.getUserId();
     final name = await SessionService.getName();
     final mobile = await SessionService.getMobile();
     

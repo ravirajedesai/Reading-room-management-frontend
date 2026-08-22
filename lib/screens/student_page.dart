@@ -10,6 +10,7 @@ import 'payment_page.dart';
 import 'seat_booking_page.dart';
 import 'pomodoro_page.dart';
 import '../services/study_tracker_service.dart';
+import '../services/session_service.dart';
 import '../widgets/app_drawer.dart';
 
 class StudentPage extends StatefulWidget {
@@ -1687,6 +1688,9 @@ class _StudentPageState extends State<StudentPage> {
       final startDate = booking["startDate"]?.toString() ?? "-";
       final endDate = booking["endDate"]?.toString() ?? "-";
 
+      final String libName = await SessionService.getActiveLibraryName() ?? "READING ROOM";
+      final String? libAddress = await SessionService.getActiveLibraryAddress();
+
       final pdf = pw.Document();
       pdf.addPage(
         pw.Page(
@@ -1698,18 +1702,27 @@ class _StudentPageState extends State<StudentPage> {
               children: [
                 pw.Center(
                   child: pw.Text(
-                    "READING ROOM",
+                    libName.toUpperCase(),
                     style: pw.TextStyle(
-                      fontSize: 24,
+                      fontSize: 22,
                       fontWeight: pw.FontWeight.bold,
                     ),
                   ),
                 ),
+                if (libAddress != null && libAddress.isNotEmpty) ...[
+                  pw.SizedBox(height: 3),
+                  pw.Center(
+                    child: pw.Text(
+                      libAddress,
+                      style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey700),
+                    ),
+                  ),
+                ],
                 pw.SizedBox(height: 5),
                 pw.Center(
                   child: pw.Text(
                     "Payment Receipt",
-                    style: const pw.TextStyle(fontSize: 16),
+                    style: const pw.TextStyle(fontSize: 15, color: PdfColors.grey800),
                   ),
                 ),
                 pw.SizedBox(height: 25),
@@ -1757,7 +1770,7 @@ class _StudentPageState extends State<StudentPage> {
                 pw.Divider(),
                 pw.Center(
                   child: pw.Text(
-                    "Thank you for using our Reading Room.",
+                    "Thank you for choosing $libName.",
                     style: const pw.TextStyle(
                       fontSize: 11,
                       color: PdfColors.grey,

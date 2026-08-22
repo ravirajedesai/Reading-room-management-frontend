@@ -22,13 +22,13 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: 📦 Install Flutter Dependencies
-        run: flutter pub get
-
-      - name: 📁 Pre-create iOS build directories
+      - name: 📁 Pre-create iOS build directories (Before pub get)
         run: |
           mkdir -p build/ios/SourcePackages
           mkdir -p build/ios/iphoneos
+
+      - name: 📦 Install Flutter Dependencies
+        run: flutter pub get
 
       - name: 🍎 Build iOS Release
         run: flutter build ios --release --no-codesign

@@ -47,6 +47,7 @@ class _LibrarySelectionPageState extends State<LibrarySelectionPage> {
       id: library.id,
       name: library.name,
       address: library.address,
+      phone: library.contactNumber,
       code: library.libraryCode,
     );
     final userId = await SessionService.getUserId();

@@ -1690,6 +1690,14 @@ class _StudentPageState extends State<StudentPage> {
 
       final String libName = await SessionService.getActiveLibraryName() ?? "READING ROOM";
       final String? libAddress = await SessionService.getActiveLibraryAddress();
+      final String? libPhone = await SessionService.getActiveLibraryPhone();
+
+      final String studentName = widget.name.isNotEmpty
+          ? widget.name
+          : (await SessionService.getName() ?? "Student");
+      final String studentMobile = widget.mobile.isNotEmpty
+          ? widget.mobile
+          : (await SessionService.getMobile() ?? "-");
 
       final pdf = pw.Document();
       pdf.addPage(
@@ -1718,6 +1726,15 @@ class _StudentPageState extends State<StudentPage> {
                     ),
                   ),
                 ],
+                if (libPhone != null && libPhone.isNotEmpty) ...[
+                  pw.SizedBox(height: 2),
+                  pw.Center(
+                    child: pw.Text(
+                      "Phone: $libPhone",
+                      style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey700),
+                    ),
+                  ),
+                ],
                 pw.SizedBox(height: 5),
                 pw.Center(
                   child: pw.Text(
@@ -1725,7 +1742,7 @@ class _StudentPageState extends State<StudentPage> {
                     style: const pw.TextStyle(fontSize: 15, color: PdfColors.grey800),
                   ),
                 ),
-                pw.SizedBox(height: 25),
+                pw.SizedBox(height: 18),
                 pw.Container(
                   width: double.infinity,
                   padding: const pw.EdgeInsets.all(12),
@@ -1746,18 +1763,25 @@ class _StudentPageState extends State<StudentPage> {
                     ),
                   ),
                 ),
-                pw.SizedBox(height: 25),
-                _pdfSectionTitle("Student Information"),
-                _pdfRow("Student Name", widget.name),
-                _pdfRow("Mobile Number", widget.mobile),
                 pw.SizedBox(height: 18),
+                _pdfSectionTitle("Student Information"),
+                _pdfRow("Student Name", studentName),
+                _pdfRow("Mobile Number", studentMobile),
+                pw.SizedBox(height: 14),
+                _pdfSectionTitle("Library Information"),
+                _pdfRow("Library Name", libName),
+                if (libAddress != null && libAddress.isNotEmpty)
+                  _pdfRow("Address", libAddress),
+                if (libPhone != null && libPhone.isNotEmpty)
+                  _pdfRow("Contact Phone", libPhone),
+                pw.SizedBox(height: 14),
                 _pdfSectionTitle("Booking Information"),
                 _pdfRow("Booking ID", bookingId),
                 _pdfRow("Seat Number", seatNumber),
                 _pdfRow("Seat ID", seatId),
                 _pdfRow("Valid From", startDate),
                 _pdfRow("Valid Until", endDate),
-                pw.SizedBox(height: 18),
+                pw.SizedBox(height: 14),
                 _pdfSectionTitle("Payment Information"),
                 _pdfRow("Payment ID", paymentId),
                 _pdfRow("Payment Status", paymentStatus),

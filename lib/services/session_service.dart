@@ -107,12 +107,14 @@ class SessionService {
     required int id,
     required String name,
     String? address,
+    String? phone,
     String? code,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('activeLibraryId', id);
     await prefs.setString('activeLibraryName', name);
     if (address != null) await prefs.setString('activeLibraryAddress', address);
+    if (phone != null) await prefs.setString('activeLibraryPhone', phone);
     if (code != null) await prefs.setString('activeLibraryCode', code);
   }
 
@@ -136,11 +138,17 @@ class SessionService {
     return prefs.getString('activeLibraryAddress');
   }
 
+  static Future<String?> getActiveLibraryPhone() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('activeLibraryPhone');
+  }
+
   static Future<void> clearActiveLibraryId() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('activeLibraryId');
     await prefs.remove('activeLibraryName');
     await prefs.remove('activeLibraryAddress');
+    await prefs.remove('activeLibraryPhone');
     await prefs.remove('activeLibraryCode');
   }
 }

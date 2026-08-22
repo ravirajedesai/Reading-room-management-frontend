@@ -1,10 +1,9 @@
-﻿import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 
 import 'firebase_options.dart';
 import 'screens/login_page.dart';
-import 'screens/dashboard_page.dart';
 import 'screens/library_selection_page.dart';
 import 'screens/owner_dashboard_page.dart';
 import 'services/session_service.dart';
@@ -108,7 +107,7 @@ Future<void> main() async {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: const Color(0xFF4054C7).withOpacity(0.2),
+                color: const Color(0xFF4054C7).withValues(alpha: 0.2),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.notifications_active,

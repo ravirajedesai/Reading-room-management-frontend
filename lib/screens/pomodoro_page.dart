@@ -9,6 +9,27 @@ enum PomodoroMode { focus, shortBreak, longBreak }
 class PomodoroPage extends StatefulWidget {
   const PomodoroPage({super.key});
 
+  static Future<void> open(BuildContext context) {
+    return Navigator.push(
+      context,
+      PageRouteBuilder(
+        opaque: true,
+        transitionDuration: const Duration(milliseconds: 220),
+        reverseTransitionDuration: const Duration(milliseconds: 180),
+        pageBuilder: (context, animation, secondaryAnimation) => const PomodoroPage(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return ColoredBox(
+            color: const Color(0xFF0B0F19),
+            child: FadeTransition(
+              opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+              child: child,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   State<PomodoroPage> createState() => _PomodoroPageState();
 }

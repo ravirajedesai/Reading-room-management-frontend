@@ -348,10 +348,7 @@ class _StudentPageState extends State<StudentPage> {
                     icon: const Icon(Icons.play_circle_outline, size: 16),
                     label: const Text("Focus Mode", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                     onPressed: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const PomodoroPage()),
-                      );
+                      await PomodoroPage.open(context);
                       if (mounted) setState(() {});
                     },
                   ),

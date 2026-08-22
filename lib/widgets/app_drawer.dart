@@ -94,9 +94,7 @@ class AppDrawer extends StatelessWidget {
 
   void _goToPomodoro(BuildContext context) {
     Navigator.of(context).pop();
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const PomodoroPage()),
-    );
+    PomodoroPage.open(context);
   }
 
   void _goToSeatBooking(BuildContext context) {

@@ -960,10 +960,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: () async {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const PomodoroPage()),
-                    );
+                    await PomodoroPage.open(context);
                     if (mounted) setState(() {});
                   },
                   icon: const Icon(Icons.play_arrow_rounded, size: 20),

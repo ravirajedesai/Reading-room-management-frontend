@@ -10,7 +10,6 @@ import '../screens/login_page.dart';
 import '../services/session_service.dart';
 import '../screens/owner_pending_payments_page.dart';
 import '../screens/owner_pending_seats_page.dart';
-import '../screens/pomodoro_page.dart';
 
 class AppDrawer extends StatelessWidget {
   final int userId;
@@ -90,11 +89,6 @@ class AppDrawer extends StatelessWidget {
       ),
       (route) => false,
     );
-  }
-
-  void _goToPomodoro(BuildContext context) {
-    Navigator.of(context).pop();
-    PomodoroPage.open(context);
   }
 
   void _goToSeatBooking(BuildContext context) {
@@ -329,13 +323,6 @@ class AppDrawer extends StatelessWidget {
                       title: 'Student Profile',
                       selected: selectedPage == 'Student Profile',
                       onTap: () => _goToStudentPage(context),
-                    ),
-                    _drawerItem(
-                      context,
-                      icon: Icons.timer_outlined,
-                      title: 'Pomodoro Focus Mode',
-                      selected: selectedPage == 'Pomodoro Focus Mode',
-                      onTap: () => _goToPomodoro(context),
                     ),
                     _drawerItem(
                       context,

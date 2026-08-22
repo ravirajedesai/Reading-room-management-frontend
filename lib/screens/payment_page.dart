@@ -4,6 +4,7 @@ import 'package:razorpay_flutter/razorpay_flutter.dart';
 import '../models/booking_model.dart';
 import '../models/payment_model.dart' as payment;
 import '../services/payment_service.dart';
+import '../services/session_service.dart';
 import '../screens/student_page.dart';
 
 class PaymentPage extends StatefulWidget {
@@ -94,7 +95,7 @@ class _PaymentPageState extends State<PaymentPage> {
   // GO TO STUDENT DASHBOARD
   // =========================================================
 
-  void _goToStudentDashboard() {
+  Future<void> _goToStudentDashboard() async {
     if (!mounted) return;
 
     final userId = widget.booking.userId;
@@ -104,13 +105,28 @@ class _PaymentPageState extends State<PaymentPage> {
       return;
     }
 
+    final savedName = await SessionService.getName() ?? '';
+    final savedMobile = await SessionService.getMobile() ?? '';
+
+    final name = (savedName.isNotEmpty && savedName != 'Student')
+        ? savedName
+        : (widget.booking.studentName != null && widget.booking.studentName!.isNotEmpty && widget.booking.studentName != 'Student'
+            ? widget.booking.studentName!
+            : 'Student');
+
+    final mobile = savedMobile.isNotEmpty
+        ? savedMobile
+        : (widget.booking.studentMobile ?? '');
+
+    if (!mounted) return;
+
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
         builder: (context) => StudentPage(
           userId: userId,
-          name: widget.booking.studentName ?? 'Student',
-          mobile: widget.booking.studentMobile ?? '',
+          name: name,
+          mobile: mobile,
         ),
       ),
       (route) => false,

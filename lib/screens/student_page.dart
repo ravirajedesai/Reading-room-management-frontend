@@ -1692,12 +1692,25 @@ class _StudentPageState extends State<StudentPage> {
       final String? libAddress = await SessionService.getActiveLibraryAddress();
       final String? libPhone = await SessionService.getActiveLibraryPhone();
 
-      final String studentName = widget.name.isNotEmpty
-          ? widget.name
-          : (await SessionService.getName() ?? "Student");
-      final String studentMobile = widget.mobile.isNotEmpty
-          ? widget.mobile
-          : (await SessionService.getMobile() ?? "-");
+      final String? profileName = studentProfile?["name"]?.toString() ?? studentProfile?["fullName"]?.toString();
+      final String? sessionName = await SessionService.getName();
+      final String studentName = (sessionName != null && sessionName.trim().isNotEmpty && sessionName != "Student")
+          ? sessionName.trim()
+          : (profileName != null && profileName.trim().isNotEmpty && profileName != "Student"
+              ? profileName.trim()
+              : (widget.name.isNotEmpty && widget.name != "Student"
+                  ? widget.name
+                  : (booking["studentName"]?.toString() ?? "Student")));
+
+      final String? profileMobile = studentProfile?["mobile"]?.toString();
+      final String? sessionMobile = await SessionService.getMobile();
+      final String studentMobile = (sessionMobile != null && sessionMobile.trim().isNotEmpty)
+          ? sessionMobile.trim()
+          : (profileMobile != null && profileMobile.trim().isNotEmpty
+              ? profileMobile.trim()
+              : (widget.mobile.isNotEmpty
+                  ? widget.mobile
+                  : (booking["studentMobile"]?.toString() ?? "-")));
 
       final pdf = pw.Document();
       pdf.addPage(

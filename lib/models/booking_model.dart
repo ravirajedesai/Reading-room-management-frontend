@@ -80,7 +80,7 @@ class Booking {
       userId: _parseInt(json['userId'] ?? json['user_id']),
 
       studentName: _parseString(
-        json['studentName'] ?? json['student_name'] ?? json['name'],
+        json['studentName'] ?? json['student_name'] ?? json['userName'] ?? json['username'] ?? json['name'],
       ),
 
       studentMobile: _parseString(

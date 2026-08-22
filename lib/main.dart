@@ -1,4 +1,4 @@
-import 'package:firebase_core/firebase_core.dart';
+﻿import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 
@@ -9,6 +9,10 @@ import 'screens/library_selection_page.dart';
 import 'screens/owner_dashboard_page.dart';
 import 'services/session_service.dart';
 import 'theme/app_theme.dart';
+
+// Global ScaffoldMessengerKey for in-app floating notification banners
+final GlobalKey<ScaffoldMessengerState> rootScaffoldMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -49,6 +53,16 @@ Future<void> main() async {
   );
 
   // ==========================================================
+  // FOREGROUND PRESENTATION OPTIONS (iOS / macOS)
+  // ==========================================================
+
+  await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
+
+  // ==========================================================
   // GET FCM TOKEN
   // ==========================================================
 
@@ -56,15 +70,14 @@ Future<void> main() async {
     final String? token = await FirebaseMessaging.instance.getToken();
 
     debugPrint('======================================');
-    debugPrint('FCM TOKEN');
-    debugPrint('$token');
+    debugPrint('FCM TOKEN: $token');
     debugPrint('======================================');
   } catch (e) {
     debugPrint('FCM TOKEN ERROR: $e');
   }
 
   // ==========================================================
-  // FOREGROUND NOTIFICATION
+  // FOREGROUND NOTIFICATION (In-App Floating Banner)
   // ==========================================================
 
   FirebaseMessaging.onMessage.listen((RemoteMessage message) {
@@ -73,6 +86,62 @@ Future<void> main() async {
     debugPrint('Title: ${message.notification?.title}');
     debugPrint('Body: ${message.notification?.body}');
     debugPrint('======================================');
+
+    final title = message.notification?.title ??
+        message.data['title'] ??
+        'Library Alert';
+    final body = message.notification?.body ??
+        message.data['body'] ??
+        '';
+
+    rootScaffoldMessengerKey.currentState?.showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        backgroundColor: const Color(0xFF1E293B),
+        elevation: 8,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        duration: const Duration(seconds: 6),
+        content: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF4054C7).withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.notifications_active,
+                  color: Color(0xFF6576D8), size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        fontSize: 14),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    body,
+                    style: const TextStyle(
+                        color: Color(0xFF94A3B8),
+                        fontSize: 13,
+                        height: 1.3),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   });
 
   // ==========================================================
@@ -92,27 +161,10 @@ class LibraryManagementApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      scaffoldMessengerKey: rootScaffoldMessengerKey,
       debugShowCheckedModeBanner: false,
-
       title: 'Library Management',
-
-      // ======================================================
-      // GLOBAL APPLICATION THEME
-      // ======================================================
-      //
-      // Use our custom theme from:
-      //
-      // theme/app_theme.dart
-      //
-      // This means all newly created pages can automatically
-      // use the same colors, buttons, text styles, cards,
-      // input fields, app bars, etc.
-      //
       theme: AppTheme.lightTheme,
-
-      // ======================================================
-      // START PAGE
-      // ======================================================
       home: const StartPage(),
     );
   }
@@ -133,7 +185,6 @@ class _StartPageState extends State<StartPage> {
   @override
   void initState() {
     super.initState();
-
     checkLoginSession();
   }
 
@@ -150,85 +201,35 @@ class _StartPageState extends State<StartPage> {
       debugPrint('LOGGED IN: $loggedIn');
       debugPrint('======================================');
 
-      // ========================================================
-      // NOT LOGGED IN
-      // ========================================================
-
       if (!loggedIn) {
         await _goToLogin();
         return;
       }
 
-      // ========================================================
-      // GET SAVED SESSION DATA
-      // ========================================================
-
       final int? userId = await SessionService.getUserId();
-
       final String? name = await SessionService.getName();
-
       final String? mobile = await SessionService.getMobile();
-
       final String? role = await SessionService.getRole();
-
       final String? token = await SessionService.getToken();
 
-      // ========================================================
-      // DEBUG SESSION
-      // ========================================================
-
       debugPrint('======================================');
-      debugPrint('SAVED SESSION');
-      debugPrint('USER ID     : $userId');
-      debugPrint('USER NAME   : $name');
-      debugPrint('USER MOBILE : $mobile');
-      debugPrint('USER ROLE   : $role');
-
-      debugPrint(
-        'JWT TOKEN   : '
-        '${token != null && token.isNotEmpty ? 'AVAILABLE' : 'NOT AVAILABLE'}',
-      );
-
+      debugPrint('SAVED SESSION: USER ID: $userId, NAME: $name, ROLE: $role');
       debugPrint('======================================');
-
-      // ========================================================
-      // VALIDATE SESSION
-      // ========================================================
 
       if (userId == null ||
           role == null ||
           role.trim().isEmpty ||
           token == null ||
           token.trim().isEmpty) {
-        debugPrint('INVALID SESSION');
-        debugPrint('CLEARING SESSION');
-
         await SessionService.logout();
-
         await _goToLogin();
-
         return;
       }
 
-      // ========================================================
-      // NORMALIZE ROLE
-      // ========================================================
-
       final String userRole = role.trim().toUpperCase();
 
-      debugPrint('NORMALIZED ROLE: $userRole');
-
-      // ========================================================
-      // OWNER
-      // ========================================================
-
       if (userRole == 'OWNER') {
-        debugPrint('======================================');
-        debugPrint('OPENING OWNER DASHBOARD');
-        debugPrint('======================================');
-
         if (!mounted) return;
-
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -239,64 +240,39 @@ class _StartPageState extends State<StartPage> {
             ),
           ),
         );
-
         return;
       }
-
-      // ========================================================
-      // STUDENT
-      // ========================================================
 
       if (userRole == 'STUDENT') {
-        debugPrint('======================================');
-        debugPrint('OPENING STUDENT DASHBOARD');
-        debugPrint('======================================');
-
         if (!mounted) return;
-
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => LibrarySelectionPage()));
-
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => LibrarySelectionPage(),
+          ),
+        );
         return;
       }
 
-      // ========================================================
-      // UNKNOWN ROLE
-      // ========================================================
-
-      debugPrint('UNKNOWN ROLE: $userRole');
-
       await SessionService.logout();
-
       await _goToLogin();
     } catch (e) {
       debugPrint('SESSION CHECK ERROR: $e');
-
       await SessionService.logout();
-
       await _goToLogin();
     }
   }
 
-  // ==========================================================
-  // GO TO LOGIN
-  // ==========================================================
-
   Future<void> _goToLogin() async {
     if (!mounted) return;
-
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (context) => const LoginPage()),
     );
   }
 
-  // ==========================================================
-  // BUILD
-  // ==========================================================
-
   @override
   Widget build(BuildContext context) {
     return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }
-

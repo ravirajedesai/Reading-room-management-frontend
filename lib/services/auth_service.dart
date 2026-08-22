@@ -304,4 +304,76 @@ class AuthService {
       throw Exception("Unable to save FCM token.");
     }
   }
+
+  // ==========================================================
+  // FORGOT PASSWORD - REQUEST OTP
+  // ==========================================================
+
+  static Future<Map<String, dynamic>> requestForgotPasswordOtp(String mobile) async {
+    final cleanMobile = mobile.trim();
+    final uri = Uri.parse("$baseUrl/forgot-password/request-otp").replace(
+      queryParameters: {"mobile": cleanMobile},
+    );
+
+    try {
+      final response = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 25));
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return body is Map<String, dynamic> ? body : <String, dynamic>{};
+      }
+
+      final errorMsg = _extractBackendMessage(response.body) ??
+          "Unable to send OTP. Please check mobile number.";
+      throw Exception(errorMsg);
+    } on SocketException {
+      throw Exception("Unable to connect to server. Check internet connection.");
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception("Unable to request OTP. Please try again.");
+    }
+  }
+
+  // ==========================================================
+  // FORGOT PASSWORD - VERIFY OTP & RESET
+  // ==========================================================
+
+  static Future<Map<String, dynamic>> verifyOtpAndResetPassword({
+    required String mobile,
+    required String otp,
+    required String newPassword,
+  }) async {
+    final uri = Uri.parse("$baseUrl/forgot-password/verify-and-reset");
+
+    try {
+      final response = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'mobile': mobile.trim(),
+          'otp': otp.trim(),
+          'newPassword': newPassword,
+        }),
+      ).timeout(const Duration(seconds: 25));
+
+      final body = jsonDecode(response.body);
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return body is Map<String, dynamic> ? body : <String, dynamic>{};
+      }
+
+      final errorMsg = _extractBackendMessage(response.body) ??
+          "Failed to reset password. Please check your OTP.";
+      throw Exception(errorMsg);
+    } on SocketException {
+      throw Exception("Unable to connect to server. Check internet connection.");
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception("Failed to reset password. Please try again.");
+    }
+  }
 }

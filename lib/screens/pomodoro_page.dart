@@ -251,248 +251,260 @@ class _PomodoroPageState extends State<PomodoroPage> with TickerProviderStateMix
         child: Scaffold(
           backgroundColor: const Color(0xFF0B0F19), // Deep OLED Slate
           body: SafeArea(
-            child: Column(
-            children: [
-              // Top Bar: Back/Minimize & Today Total
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    InkWell(
-                      onTap: () {
-                        _flushUnsavedTime();
-                        Navigator.pop(context);
-                      },
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 13),
-                            SizedBox(width: 6),
-                            Text(
-                              'Back',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  physics: const ClampingScrollPhysics(),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                    child: IntrinsicHeight(
+                      child: Column(
+                        children: [
+                          // Top Bar: Back/Minimize & Today Total
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                InkWell(
+                                  onTap: () {
+                                    _flushUnsavedTime();
+                                    Navigator.pop(context);
+                                  },
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 13),
+                                        SizedBox(width: 6),
+                                        Text(
+                                          'Back',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.local_fire_department_rounded, color: Colors.orangeAccent, size: 16),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Today: ${StudyTrackerService.formatMinutesToHours(_todayTotalMinutes)}',
+                                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 10),
+
+                          // Mode Selector Tabs
+                          Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 24),
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E293B),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Row(
+                              children: [
+                                _buildModeTab('Focus', PomodoroMode.focus, const Color(0xFF6366F1)),
+                                _buildModeTab('Short Break', PomodoroMode.shortBreak, const Color(0xFF10B981)),
+                                _buildModeTab('Long Break', PomodoroMode.longBreak, const Color(0xFF06B6D4)),
+                              ],
+                            ),
+                          ),
+
+                          const Spacer(),
+
+                          // Circular Countdown Timer
+                          Center(
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                // Outer Glow / Track
+                                SizedBox(
+                                  width: 240,
+                                  height: 240,
+                                  child: CircularProgressIndicator(
+                                    value: progress,
+                                    strokeWidth: 10,
+                                    backgroundColor: Colors.white.withValues(alpha: 0.08),
+                                    valueColor: AlwaysStoppedAnimation<Color>(accentColor),
+                                    strokeCap: StrokeCap.round,
+                                  ),
+                                ),
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      _formatTime(_remainingSeconds),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 50,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 2,
+                                        fontFeatures: [FontFeature.tabularFigures()],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      _mode == PomodoroMode.focus
+                                          ? 'DEEP FOCUS'
+                                          : (_mode == PomodoroMode.shortBreak ? 'SHORT BREAK' : 'LONG REST'),
+                                      style: TextStyle(
+                                        color: accentColor,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 2,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    // Cycle Indicator
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: List.generate(4, (index) {
+                                        final isDone = index < _completedCycles;
+                                        return Container(
+                                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                                          width: 8,
+                                          height: 8,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: isDone ? accentColor : Colors.white.withValues(alpha: 0.15),
+                                          ),
+                                        );
+                                      }),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const Spacer(),
+
+                          // Action Controls: Pause/Play & Reset
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // Reset Button
+                              IconButton.filledTonal(
+                                iconSize: 24,
+                                style: IconButton.styleFrom(
+                                  backgroundColor: const Color(0xFF1E293B),
+                                  foregroundColor: Colors.white70,
+                                  padding: const EdgeInsets.all(14),
+                                ),
+                                icon: const Icon(Icons.refresh_rounded),
+                                onPressed: _resetTimer,
+                                tooltip: 'Reset Timer',
+                              ),
+
+                              const SizedBox(width: 24),
+
+                              // Main Play/Pause Button
+                              SizedBox(
+                                width: 68,
+                                height: 68,
+                                child: ElevatedButton(
+                                  onPressed: _toggleTimer,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: accentColor,
+                                    foregroundColor: Colors.white,
+                                    elevation: 6,
+                                    shadowColor: accentColor.withValues(alpha: 0.5),
+                                    shape: const CircleBorder(),
+                                    padding: EdgeInsets.zero,
+                                  ),
+                                  child: Icon(
+                                    _isRunning ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                    size: 36,
+                                  ),
+                                ),
+                              ),
+
+                              const SizedBox(width: 24),
+
+                              // Skip / Next Button
+                              IconButton.filledTonal(
+                                iconSize: 24,
+                                style: IconButton.styleFrom(
+                                  backgroundColor: const Color(0xFF1E293B),
+                                  foregroundColor: Colors.white70,
+                                  padding: const EdgeInsets.all(14),
+                                ),
+                                icon: const Icon(Icons.skip_next_rounded),
+                                onPressed: () {
+                                  HapticFeedback.lightImpact();
+                                  if (_mode == PomodoroMode.focus) {
+                                    _setMode(PomodoroMode.shortBreak);
+                                  } else {
+                                    _setMode(PomodoroMode.focus);
+                                  }
+                                },
+                                tooltip: 'Skip to Next',
+                              ),
+                            ],
+                          ),
+
+                          const Spacer(),
+
+                          // Motivational Quote Footer
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _quoteIndex = (_quoteIndex + 1) % _quotes.length;
+                                });
+                              },
+                              child: Text(
+                                '"${_quotes[_quoteIndex]}"',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.grey.shade500,
+                                  fontSize: 12,
+                                  fontStyle: FontStyle.italic,
+                                  height: 1.3,
+                                ),
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.local_fire_department_rounded, color: Colors.orangeAccent, size: 16),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Today: ${StudyTrackerService.formatMinutesToHours(_todayTotalMinutes)}',
-                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-
-            const SizedBox(height: 10),
-
-            // Mode Selector Tabs
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 24),
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E293B),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Row(
-                children: [
-                  _buildModeTab('Focus', PomodoroMode.focus, const Color(0xFF6366F1)),
-                  _buildModeTab('Short Break', PomodoroMode.shortBreak, const Color(0xFF10B981)),
-                  _buildModeTab('Long Break', PomodoroMode.longBreak, const Color(0xFF06B6D4)),
-                ],
-              ),
+                  ),
+                );
+              },
             ),
-
-            const Spacer(),
-
-            // Circular Countdown Timer
-            Center(
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  // Outer Glow / Track
-                  SizedBox(
-                    width: 260,
-                    height: 260,
-                    child: CircularProgressIndicator(
-                      value: progress,
-                      strokeWidth: 10,
-                      backgroundColor: Colors.white.withValues(alpha: 0.08),
-                      valueColor: AlwaysStoppedAnimation<Color>(accentColor),
-                      strokeCap: StrokeCap.round,
-                    ),
-                  ),
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _formatTime(_remainingSeconds),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 54,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 2,
-                          fontFeatures: [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _mode == PomodoroMode.focus
-                            ? 'DEEP FOCUS'
-                            : (_mode == PomodoroMode.shortBreak ? 'SHORT BREAK' : 'LONG REST'),
-                        style: TextStyle(
-                          color: accentColor,
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 2,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      // Cycle Indicator
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: List.generate(4, (index) {
-                          final isDone = index < _completedCycles;
-                          return Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 4),
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: isDone ? accentColor : Colors.white.withValues(alpha: 0.15),
-                            ),
-                          );
-                        }),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            const Spacer(),
-
-            // Action Controls: Pause/Play & Reset
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Reset Button
-                IconButton.filledTonal(
-                  iconSize: 24,
-                  style: IconButton.styleFrom(
-                    backgroundColor: const Color(0xFF1E293B),
-                    foregroundColor: Colors.white70,
-                    padding: const EdgeInsets.all(16),
-                  ),
-                  icon: const Icon(Icons.refresh_rounded),
-                  onPressed: _resetTimer,
-                  tooltip: 'Reset Timer',
-                ),
-
-                const SizedBox(width: 24),
-
-                // Main Play/Pause Button
-                SizedBox(
-                  width: 72,
-                  height: 72,
-                  child: ElevatedButton(
-                    onPressed: _toggleTimer,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: accentColor,
-                      foregroundColor: Colors.white,
-                      elevation: 6,
-                      shadowColor: accentColor.withValues(alpha: 0.5),
-                      shape: const CircleBorder(),
-                      padding: EdgeInsets.zero,
-                    ),
-                    child: Icon(
-                      _isRunning ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                      size: 38,
-                    ),
-                  ),
-                ),
-
-                const SizedBox(width: 24),
-
-                // Skip / Next Button
-                IconButton.filledTonal(
-                  iconSize: 24,
-                  style: IconButton.styleFrom(
-                    backgroundColor: const Color(0xFF1E293B),
-                    foregroundColor: Colors.white70,
-                    padding: const EdgeInsets.all(16),
-                  ),
-                  icon: const Icon(Icons.skip_next_rounded),
-                  onPressed: () {
-                    HapticFeedback.lightImpact();
-                    if (_mode == PomodoroMode.focus) {
-                      _setMode(PomodoroMode.shortBreak);
-                    } else {
-                      _setMode(PomodoroMode.focus);
-                    }
-                  },
-                  tooltip: 'Skip to Next',
-                ),
-              ],
-            ),
-
-            const Spacer(),
-
-            // Motivational Quote Footer
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-              child: GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _quoteIndex = (_quoteIndex + 1) % _quotes.length;
-                  });
-                },
-                child: Text(
-                  '"${_quotes[_quoteIndex]}"',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.grey.shade500,
-                    fontSize: 12,
-                    fontStyle: FontStyle.italic,
-                    height: 1.4,
-                  ),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
-    ),
-  ),
-);
-}
+    );
+  }
 
   Widget _buildModeTab(String title, PomodoroMode mode, Color activeColor) {
     final isSelected = _mode == mode;
